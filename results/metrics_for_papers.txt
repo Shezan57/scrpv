@@ -1,0 +1,29 @@
+                Class     Images  Instances      Box(P          R      mAP50  mAP50-95): 11%                 Class     Images  Instances      Box(P          R      mAP50  mAP50-95): 22%                 Class     Images  Instances      Box(P          R      mAP50  mAP50-95): 33%                 Class     Images  Instances      Box(P          R      mAP50  mAP50-95): 44%                 Class     Images  Instances      Box(P          R      mAP50  mAP50-95): 56%                 Class     Images  Instances      Box(P          R      mAP50  mAP50-95): 67%                 Class     Images  Instances      Box(P          R      mAP50  mAP50-95): 78%                 Class     Images  Instances      Box(P          R      mAP50  mAP50-95): 89%                 Class     Images  Instances      Box(P          R      mAP50  mAP50-95): 100                 Class     Images  Instances      Box(P          R      mAP50  mAP50-95): 100% ━━━━━━━━━━━━ 9/9 0.1it/s 1:27
+                   all        141       1134      0.637      0.632      0.637      0.317
+                helmet        107        201      0.845      0.816      0.857      0.467
+                gloves         68        136      0.843      0.751      0.817      0.401     
+                  vest        109        171      0.847      0.808      0.858      0.528     
+                 boots         63        145      0.752      0.774      0.817      0.465     
+               goggles         44         47       0.68      0.813      0.818      0.376     
+                  none         41         76      0.444      0.592      0.476      0.164     
+                Person        137        234      0.857      0.876      0.911      0.534     
+             no_helmet         25         40      0.388      0.325      0.325      0.107     
+             no_goggle         23         36      0.313      0.253      0.222     0.0674     
+             no_gloves         21         48      0.402      0.308      0.271     0.0583     
+Speed: 1.5ms preprocess, 600.2ms inference, 0.0ms loss, 0.9ms postprocess per image
+Results saved to D:\SHEZAN\AI\scrpv\runs\detect\val3
+=== METRICS FOR PAPER ===
+Overall mAP@50: 0.637
+Overall mAP@50-95: 0.317
+
+Per-class results:
+helmet: mAP=0.467, Precision=0.845, Recall=0.816
+gloves: mAP=0.401, Precision=0.843, Recall=0.751
+vest: mAP=0.528, Precision=0.847, Recall=0.808
+boots: mAP=0.465, Precision=0.752, Recall=0.774
+goggles: mAP=0.376, Precision=0.680, Recall=0.813
+none: mAP=0.164, Precision=0.444, Recall=0.592
+Person: mAP=0.534, Precision=0.857, Recall=0.876
+no_helmet: mAP=0.107, Precision=0.388, Recall=0.325
+no_goggle: mAP=0.067, Precision=0.313, Recall=0.253
+no_gloves: mAP=0.058, Precision=0.402, Recall=0.308
