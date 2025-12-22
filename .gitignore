@@ -26,7 +26,8 @@ share/python-wheels/
 .installed.cfg
 *.egg
 *.pdf
-
+runs_adamw/
+runs_sgd/
 backup.txt
 *.DOCX
 MANIFEST

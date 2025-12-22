@@ -1,0 +1,15 @@
+✅ Analysis Complete!
+   Total Persons Detected: 199
+   Total Violations Found: 60
+
+============================================================
+📊 DECISION PATH DISTRIBUTION
+============================================================
+   Fast Safe           :  117 ( 58.8%)
+   Fast Violation      :   12 (  6.0%)
+   Rescue Head         :   11 (  5.5%)
+   Rescue Body         :   19 (  9.5%)
+   Critical            :   40 ( 20.1%)
+
+   SAM ACTIVATION RATE :   70 ( 35.2%)
+============================================================
