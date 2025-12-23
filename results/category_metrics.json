@@ -1,0 +1,42 @@
+{
+    "person": {
+        "precision": 0.8075,
+        "recall": 0.8075,
+        "f1_score": 0.8075,
+        "tp": 172,
+        "fp": 41,
+        "fn": 41,
+        "total_detections": 213,
+        "total_ground_truth": 213
+    },
+    "helmet": {
+        "precision": 0.9191,
+        "recall": 0.9086,
+        "f1_score": 0.9138,
+        "tp": 159,
+        "fp": 14,
+        "fn": 16,
+        "total_detections": 173,
+        "total_ground_truth": 175
+    },
+    "vest": {
+        "precision": 0.85,
+        "recall": 0.8718,
+        "f1_score": 0.8608,
+        "tp": 136,
+        "fp": 24,
+        "fn": 20,
+        "total_detections": 160,
+        "total_ground_truth": 156
+    },
+    "no_helmet": {
+        "precision": 0.1724,
+        "recall": 0.125,
+        "f1_score": 0.1449,
+        "tp": 5,
+        "fp": 24,
+        "fn": 35,
+        "total_detections": 29,
+        "total_ground_truth": 40
+    }
+}
