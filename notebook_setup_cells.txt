@@ -1,0 +1,1032 @@
+
+================================================================================
+=== Quantitative_SAM_Improvement_Analysis_colab.ipynb ===
+================================================================================
+
+--- CELL 1 ---
+# Install dependencies
+!pip install -q ultralytics opencv-python-headless matplotlib seaborn pandas
+# !pip install -q git+https://github.com/facebookresearch/segment-anything.git
+
+--- CELL 2 ---
+!wget --header="Authorization: Bearer hf_token" "https://huggingface.co/facebook/sam3/resolve/main/sam3.pt"
+
+--- CELL 3 ---
+import json
+import os
+from google.colab import userdata
+
+# Ensure the .kaggle directory exists
+kaggle_dir = os.path.expanduser("~/.kaggle")
+os.makedirs(kaggle_dir, exist_ok=True)
+
+# Path to kaggle.json
+kaggle_json_path = os.path.join(kaggle_dir, "kaggle.json")
+
+# Retrieve credentials from Colab secrets
+kaggle_username = userdata.get('KAGGLE_USERNAME')
+kaggle_key = userdata.get('KAGGLE_KEY')
+
+if kaggle_username and kaggle_key:
+    # Create the kaggle.json file
+    kaggle_credentials = {
+        "username": kaggle_username,
+        "key": kaggle_key
+    }
+    with open(kaggle_json_path, "w") as f:
+        json.dump(kaggle_credentials, f)
+
+    # Set permissions
+    os.chmod(kaggle_json_path, 0o600)
+    print("Kaggle API key configured from Colab secrets.")
+else:
+    print("KAGGLE_USERNAME or KAGGLE_KEY not found in Colab secrets. Please add them.")
+
+
+--- CELL 4 ---
+!kaggle datasets download -d rjn0007/ppeconstruction
+!unzip ppeconstruction.zip -d ppeconstruction
+!rm ppeconstruction.zip # Clean up the zip file
+
+--- CELL 5 ---
+# Imports
+import os
+import cv2
+import json
+import glob
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+from collections import defaultdict, Counter
+from datetime import datetime
+from ultralytics import YOLO
+from ultralytics.models.sam import SAM3SemanticPredictor
+
+print("✅ All imports successful!")
+
+--- CELL 6 ---
+# Configuration
+class Config:
+    # Paths - MODIFY THESE
+    YOLO_WEIGHTS = '/content/best.pt'  # Your trained YOLO model
+    SAM_WEIGHTS = '/content/sam3.pt'   # SAM 3 weights
+    TEST_IMAGES_DIR = '/content/ppeconstruction/images/test'  # Test images directory
+    GROUND_TRUTH_DIR = '/content/ppeconstruction/labels/test'  # Ground truth annotations
+    OUTPUT_DIR = '/content/results'
+
+     # Detection parameters - OPTIMIZED
+    CONFIDENCE_THRESHOLD = 0.25  # Lowered to detect more objects
+    IOU_THRESHOLD = 0.5         # Standard IoU threshold
+    SAM_IMAGE_SIZE = 1024
+
+    # Class definitions (from your trained model)
+    CLASS_NAMES = {
+        0: 'helmet', 1: 'gloves', 2: 'vest', 3: 'boots',
+        4: 'goggles', 5: 'none', 6: 'Person', 7: 'no_helmet',
+        8: 'no_goggle', 9: 'no_gloves'
+    }
+
+    # Categories to evaluate - YOUR HIERARCHICAL SYSTEM'S CORE CLASSES
+    KEY_CLASSES = {
+        'person': [6],      # Step 1: Person detected?
+        'helmet': [0],      # Step 2: Helmet present?
+        'vest': [2],        # Step 2: Vest present?
+        'no_helmet': [7]    # Step 3: Violation fast path
+    }
+
+config = Config()
+os.makedirs(config.OUTPUT_DIR, exist_ok=True)
+print("✅ Configuration loaded")
+print(f"📊 Will evaluate: {list(config.KEY_CLASSES.keys())}")
+
+--- CELL 7 ---
+# Utility Functions
+
+def parse_yolo_annotation(txt_path, img_width, img_height):
+    """Parse YOLO format annotation"""
+    annotations = []
+    if not os.path.exists(txt_path):
+        return annotations
+
+    with open(txt_path, 'r') as f:
+        for line in f:
+            parts = line.strip().split()
+            if len(parts) < 5:
+                continue
+
+            class_id = int(parts[0])
+            x_center = float(parts[1]) * img_width
+            y_center = float(parts[2]) * img_height
+            width = float(parts[3]) * img_width
+            height = float(parts[4]) * img_height
+
+            x_min = int(x_center - width / 2)
+            y_min = int(y_center - height / 2)
+            x_max = int(x_center + width / 2)
+            y_max = int(y_center + height / 2)
+
+            annotations.append([class_id, x_min, y_min, x_max, y_max])
+
+    return annotations
+
+
+def calculate_iou(box1, box2):
+    """Calculate IoU between two boxes"""
+    x1 = max(box1[0], box2[0])
+    y1 = max(box1[1], box2[1])
+    x2 = min(box1[2], box2[2])
+    y2 = min(box1[3], box2[3])
+
+    intersection = max(0, x2 - x1) * max(0, y2 - y1)
+    if intersection == 0:
+        return 0.0
+
+    area1 = (box1[2] - box1[0]) * (box1[3] - box1[1])
+    area2 = (box2[2] - box2[0]) * (box2[3] - box2[1])
+    union = area1 + area2 - intersection
+
+    return intersection / union if union > 0 else 0.0
+
+
+def match_detections_to_ground_truth(detections, ground_truth, iou_threshold=0.5):
+    """Match detected violations to ground truth"""
+    gt_violations = [gt for gt in ground_truth if gt[0] in config.TARGET_CLASSES['no_helmet']]
+
+    matched_gt = set()
+    true_positives = 0
+    false_positives = 0
+
+    for det in detections:
+        if not det['is_violation']:
+            continue
+
+        det_box = det['bbox']
+        matched = False
+
+        for idx, gt in enumerate(gt_violations):
+            if idx in matched_gt:
+                continue
+
+            gt_box = gt[1:5]
+            iou = calculate_iou(det_box, gt_box)
+
+            if iou >= iou_threshold:
+                true_positives += 1
+                matched_gt.add(idx)
+                matched = True
+                break
+
+        if not matched:
+            false_positives += 1
+
+    false_negatives = len(gt_violations) - len(matched_gt)
+
+    return true_positives, false_positives, false_negatives
+
+
+def calculate_metrics(tp, fp, fn):
+    """Calculate precision, recall, F1"""
+    precision = tp / (tp + fp) if (tp + fp) > 0 else 0.0
+    recall = tp / (tp + fn) if (tp + fn) > 0 else 0.0
+    f1 = 2 * (precision * recall) / (precision + recall) if (precision + recall) > 0 else 0.0
+    return precision, recall, f1
+
+print("✅ Utility functions loaded")
+
+--- CELL 8 ---
+def match_detections_with_gt(detections, ground_truths, iou_threshold):
+    """
+    Match detections to ground truth boxes using IoU threshold
+    Returns: (true_positives, false_positives, false_negatives)
+    """
+    if len(ground_truths) == 0:
+        return 0, len(detections), 0
+
+    if len(detections) == 0:
+        return 0, 0, len(ground_truths)
+
+    matched_gt_indices = set()
+    true_positives = 0
+
+    # For each detection, find best matching ground truth
+    for det in detections:
+        best_iou = 0
+        best_gt_idx = -1
+
+        for idx, gt in enumerate(ground_truths):
+            if idx in matched_gt_indices:
+                continue  # Already matched
+
+            iou = calculate_iou(det['bbox'], gt['bbox'])
+
+            if iou > best_iou and iou >= iou_threshold:
+                best_iou = iou
+                best_gt_idx = idx
+
+        if best_gt_idx >= 0:
+            true_positives += 1
+            matched_gt_indices.add(best_gt_idx)
+
+    false_positives = len(detections) - true_positives
+    false_negatives = len(ground_truths) - true_positives
+
+    return true_positives, false_positives, false_negatives
+
+
+def evaluate_per_category(model, test_dir, gt_dir, categories_to_eval):
+    """
+    Evaluate model performance for each category separately
+
+    Args:
+        model: YOLO model
+        test_dir: Path to test images
+        gt_dir: Path to ground truth labels
+        categories_to_eval: Dict of category names to class IDs
+
+    Returns:
+        Dict with metrics for each category
+    """
+    results = {cat: {'tp': 0, 'fp': 0, 'fn': 0} for cat in categories_to_eval.keys()}
+    detailed_results = []
+
+    image_files = glob.glob(os.path.join(test_dir, '*.jpg'))
+    total_images = len(image_files)
+
+    print(f"📊 Evaluating {total_images} images...")
+
+    for idx, img_path in enumerate(image_files):
+        if idx % 30 == 0:
+            print(f"   Progress: {idx}/{total_images}")
+
+        # Load image
+        img = cv2.imread(img_path)
+        if img is None:
+            continue
+
+        h, w = img.shape[:2]
+        img_name = os.path.basename(img_path)
+
+        # Load ground truth
+        gt_path = os.path.join(gt_dir, img_name.replace('.jpg', '.txt').replace('.png', '.txt'))
+        gt_annotations = parse_yolo_annotation(gt_path, w, h)
+
+        # Run detection
+        predictions = model.predict(img_path, conf=config.CONFIDENCE_THRESHOLD, verbose=False)[0]
+
+        # Process each category
+        image_result = {'image': img_name}
+
+        for cat_name, class_ids in categories_to_eval.items():
+            # Filter detections for this category
+            cat_detections = []
+            if predictions.boxes is not None:
+                for box in predictions.boxes:
+                    cls_id = int(box.cls[0])
+                    if cls_id in class_ids:
+                        coords = box.xyxy[0].cpu().numpy()
+                        cat_detections.append({
+                            'class': cls_id,
+                            'bbox': [float(coords[0]), float(coords[1]),
+                                   float(coords[2]), float(coords[3])]
+                        })
+
+            # Filter ground truth for this category
+            cat_ground_truths = []
+            for gt in gt_annotations:
+                if gt[0] in class_ids:
+                    cat_ground_truths.append({
+                        'class': gt[0],
+                        'bbox': [float(gt[1]), float(gt[2]), float(gt[3]), float(gt[4])]
+                    })
+
+            # Calculate TP/FP/FN
+            tp, fp, fn = match_detections_with_gt(
+                cat_detections,
+                cat_ground_truths,
+                config.IOU_THRESHOLD
+            )
+
+            results[cat_name]['tp'] += tp
+            results[cat_name]['fp'] += fp
+            results[cat_name]['fn'] += fn
+
+            image_result[f'{cat_name}_tp'] = tp
+            image_result[f'{cat_name}_fp'] = fp
+            image_result[f'{cat_name}_fn'] = fn
+
+        detailed_results.append(image_result)
+
+    # Calculate metrics for each category
+    metrics = {}
+    for cat_name, counts in results.items():
+        tp, fp, fn = counts['tp'], counts['fp'], counts['fn']
+        precision, recall, f1 = calculate_metrics(tp, fp, fn)
+
+        metrics[cat_name] = {
+            'precision': round(precision, 4),
+            'recall': round(recall, 4),
+            'f1_score': round(f1, 4),
+            'tp': tp,
+            'fp': fp,
+            'fn': fn,
+            'total_detections': tp + fp,
+            'total_ground_truth': tp + fn
+        }
+
+    return metrics, detailed_results
+
+
+def create_comparison_visualization(metrics_dict, output_path):
+    """Create comprehensive visualization of results"""
+
+    categories = list(metrics_dict.keys())
+    precisions = [metrics_dict[cat]['precision'] for cat in categories]
+    recalls = [metrics_dict[cat]['recall'] for cat in categories]
+    f1_scores = [metrics_dict[cat]['f1_score'] for cat in categories]
+
+    fig, axes = plt.subplots(2, 2, figsize=(15, 12))
+    fig.suptitle('PPE Detection Performance by Category', fontsize=16, fontweight='bold')
+
+    # 1. Precision comparison
+    ax1 = axes[0, 0]
+    bars1 = ax1.barh(categories, precisions, color='steelblue')
+    ax1.set_xlabel('Precision', fontsize=12)
+    ax1.set_title('Precision by Category', fontsize=13, fontweight='bold')
+    ax1.set_xlim(0, 1.0)
+    for i, (bar, val) in enumerate(zip(bars1, precisions)):
+        ax1.text(val + 0.02, i, f'{val:.3f}', va='center', fontsize=10)
+    ax1.grid(axis='x', alpha=0.3)
+
+    # 2. Recall comparison
+    ax2 = axes[0, 1]
+    bars2 = ax2.barh(categories, recalls, color='coral')
+    ax2.set_xlabel('Recall', fontsize=12)
+    ax2.set_title('Recall by Category', fontsize=13, fontweight='bold')
+    ax2.set_xlim(0, 1.0)
+    for i, (bar, val) in enumerate(zip(bars2, recalls)):
+        ax2.text(val + 0.02, i, f'{val:.3f}', va='center', fontsize=10)
+    ax2.grid(axis='x', alpha=0.3)
+
+    # 3. F1-Score comparison
+    ax3 = axes[1, 0]
+    bars3 = ax3.barh(categories, f1_scores, color='mediumseagreen')
+    ax3.set_xlabel('F1-Score', fontsize=12)
+    ax3.set_title('F1-Score by Category', fontsize=13, fontweight='bold')
+    ax3.set_xlim(0, 1.0)
+    for i, (bar, val) in enumerate(zip(bars3, f1_scores)):
+        ax3.text(val + 0.02, i, f'{val:.3f}', va='center', fontsize=10)
+    ax3.grid(axis='x', alpha=0.3)
+
+    # 4. TP/FP/FN counts
+    ax4 = axes[1, 1]
+    tp_counts = [metrics_dict[cat]['tp'] for cat in categories]
+    fp_counts = [metrics_dict[cat]['fp'] for cat in categories]
+    fn_counts = [metrics_dict[cat]['fn'] for cat in categories]
+
+    x = np.arange(len(categories))
+    width = 0.25
+
+    ax4.bar(x - width, tp_counts, width, label='True Positive', color='green', alpha=0.8)
+    ax4.bar(x, fp_counts, width, label='False Positive', color='red', alpha=0.8)
+    ax4.bar(x + width, fn_counts, width, label='False Negative', color='orange', alpha=0.8)
+
+    ax4.set_xlabel('Category', fontsize=12)
+    ax4.set_ylabel('Count', fontsize=12)
+    ax4.set_title('Detection Counts (TP/FP/FN)', fontsize=13, fontweight='bold')
+    ax4.set_xticks(x)
+    ax4.set_xticklabels(categories, rotation=45, ha='right')
+    ax4.legend(loc='upper right')
+    ax4.grid(axis='y', alpha=0.3)
+
+    plt.tight_layout()
+    plt.savefig(output_path, dpi=300, bbox_inches='tight')
+    print(f"📊 Visualization saved: {output_path}")
+    plt.show()
+
+
+def print_detailed_results(metrics):
+    """Print formatted results table"""
+    print("\n" + "="*80)
+    print("DETECTION PERFORMANCE BY CATEGORY")
+    print("="*80)
+    print(f"{'Category':<15} {'Precision':<12} {'Recall':<12} {'F1-Score':<12} {'TP':<6} {'FP':<6} {'FN':<6}")
+    print("-"*80)
+
+    for cat_name, metric in metrics.items():
+        print(f"{cat_name:<15} "
+              f"{metric['precision']:<12.3f} "
+              f"{metric['recall']:<12.3f} "
+              f"{metric['f1_score']:<12.3f} "
+              f"{metric['tp']:<6} "
+              f"{metric['fp']:<6} "
+              f"{metric['fn']:<6}")
+
+    print("="*80)
+
+    # Summary statistics
+    avg_precision = np.mean([m['precision'] for m in metrics.values()])
+    avg_recall = np.mean([m['recall'] for m in metrics.values()])
+    avg_f1 = np.mean([m['f1_score'] for m in metrics.values()])
+
+    print(f"\n📊 AVERAGE METRICS:")
+    print(f"   Precision: {avg_precision:.3f}")
+    print(f"   Recall:    {avg_recall:.3f}")
+    print(f"   F1-Score:  {avg_f1:.3f}")
+
+
+print("✅ Multi-category evaluation functions loaded!")
+
+
+--- CELL 9 ---
+# YOLO-Only Detector (Baseline)
+
+class YOLOOnlyDetector:
+    def __init__(self):
+        print("🔧 Initializing YOLO-Only Baseline...")
+        self.model = YOLO(config.YOLO_WEIGHTS)
+        print("✅ YOLO-Only Baseline Ready")
+
+    def detect(self, image_path):
+        results = self.model.predict(image_path, conf=config.CONFIDENCE_THRESHOLD, verbose=False)
+        detections = []
+        for box in results[0].boxes:
+            cls = int(box.cls[0])
+            conf = float(box.conf[0])
+            coords = box.xyxy[0].cpu().numpy().astype(int)
+            detections.append([cls, coords[0], coords[1], coords[2], coords[3], conf])
+        return detections
+
+    def evaluate_violations(self, image_path):
+        detections = self.detect(image_path)
+
+        persons = [d for d in detections if d[0] in config.TARGET_CLASSES['person']]
+        helmets = [d for d in detections if d[0] in config.TARGET_CLASSES['helmet']]
+        vests = [d for d in detections if d[0] in config.TARGET_CLASSES['vest']]
+        no_helmets = [d for d in detections if d[0] in config.TARGET_CLASSES['no_helmet']]
+
+        violations = []
+
+        for person in persons:
+            p_box = person[1:5]
+            has_helmet = False
+            has_vest = False
+
+            for helmet in helmets:
+                if calculate_iou(p_box, helmet[1:5]) > config.IOU_THRESHOLD:
+                    has_helmet = True
+                    break
+
+            for vest in vests:
+                if calculate_iou(p_box, vest[1:5]) > config.IOU_THRESHOLD:
+                    has_vest = True
+                    break
+
+            for no_helmet in no_helmets:
+                if calculate_iou(p_box, no_helmet[1:5]) > config.IOU_THRESHOLD:
+                    has_helmet = False
+                    break
+
+            is_violation = not has_helmet or not has_vest
+
+            violations.append({
+                'bbox': p_box,
+                'has_helmet': has_helmet,
+                'has_vest': has_vest,
+                'is_violation': is_violation,
+                'confidence': person[5]
+            })
+
+        return violations
+
+print("✅ YOLOOnlyDetector class defined")
+
+--- CELL 11 ---
+# Load model
+print("🔧 Loading YOLO model...")
+yolo_model = YOLO(config.YOLO_WEIGHTS)
+print("✅ Model loaded!")
+
+# Run evaluation
+print("\n🚀 Starting comprehensive evaluation...")
+metrics, detailed_results = evaluate_per_category(
+    model=yolo_model,
+    test_dir=config.TEST_IMAGES_DIR,
+    gt_dir=config.GROUND_TRUTH_DIR,
+    categories_to_eval=config.KEY_CLASSES
+)
+
+# Print results
+print_detailed_results(metrics)
+
+# Create visualization
+viz_path = os.path.join(config.OUTPUT_DIR, 'category_performance.png')
+create_comparison_visualization(metrics, viz_path)
+
+# Save results to JSON
+results_path = os.path.join(config.OUTPUT_DIR, 'category_metrics.json')
+with open(results_path, 'w') as f:
+    json.dump(metrics, f, indent=4)
+print(f"\n💾 Results saved: {results_path}")
+
+# Save detailed CSV
+df = pd.DataFrame(detailed_results)
+csv_path = os.path.join(config.OUTPUT_DIR, 'detailed_results_per_image.csv')
+df.to_csv(csv_path, index=False)
+print(f"💾 Detailed results saved: {csv_path}")
+
+print("\n✅ EVALUATION COMPLETE!")
+print(f"📁 All results saved to: {config.OUTPUT_DIR}")
+
+
+--- CELL 12 ---
+# Run Quantitative Evaluation
+
+def run_evaluation():
+    print("="*80)
+    print("🔬 QUANTITATIVE SAM IMPROVEMENT ANALYSIS")
+    print("="*80)
+
+    # Initialize detectors
+    yolo_detector = YOLOOnlyDetector()
+    hybrid_detector = HybridDetector()
+
+    # Get test images
+    test_images = glob.glob(f"{config.TEST_IMAGES_DIR}/*.jpg") + \
+                  glob.glob(f"{config.TEST_IMAGES_DIR}/*.png") + \
+                  glob.glob(f"{config.TEST_IMAGES_DIR}/*.webp")
+
+    print(f"\n📸 Found {len(test_images)} test images\n")
+
+    yolo_results = {'tp': 0, 'fp': 0, 'fn': 0}
+    hybrid_results = {'tp': 0, 'fp': 0, 'fn': 0}
+    decision_paths = []
+    detailed_results = []
+
+    for idx, img_path in enumerate(test_images):
+        if idx % 10 == 0:
+            print(f"   Processing image {idx+1}/{len(test_images)}...")
+
+        img_name = os.path.basename(img_path)
+        gt_path = os.path.join(config.GROUND_TRUTH_DIR,
+                               img_name.replace('.jpg', '.txt').replace('.png', '.txt').replace('.webp', '.txt'))
+
+        img = cv2.imread(img_path)
+        h, w = img.shape[:2]
+        ground_truth = parse_yolo_annotation(gt_path, w, h)
+
+        if len(ground_truth) == 0:
+            continue
+
+        try:
+            # YOLO-only
+            yolo_detections = yolo_detector.evaluate_violations(img_path)
+            yolo_tp, yolo_fp, yolo_fn = match_detections_to_ground_truth(yolo_detections, ground_truth)
+            yolo_results['tp'] += yolo_tp
+            yolo_results['fp'] += yolo_fp
+            yolo_results['fn'] += yolo_fn
+
+            # Hybrid
+            hybrid_detections = hybrid_detector.evaluate_violations(img_path)
+            hybrid_tp, hybrid_fp, hybrid_fn = match_detections_to_ground_truth(hybrid_detections, ground_truth)
+            hybrid_results['tp'] += hybrid_tp
+            hybrid_results['fp'] += hybrid_fp
+            hybrid_results['fn'] += hybrid_fn
+
+            for det in hybrid_detections:
+                if 'decision_path' in det:
+                    decision_paths.append(det['decision_path'])
+
+            detailed_results.append({
+                'image': img_name,
+                'yolo_tp': yolo_tp, 'yolo_fp': yolo_fp, 'yolo_fn': yolo_fn,
+                'hybrid_tp': hybrid_tp, 'hybrid_fp': hybrid_fp, 'hybrid_fn': hybrid_fn
+            })
+
+        except Exception as e:
+            print(f"   ⚠️ Error: {e}")
+            continue
+
+    return yolo_results, hybrid_results, decision_paths, detailed_results
+
+# Run evaluation
+yolo_results, hybrid_results, decision_paths, detailed_results = run_evaluation()
+
+--- CELL 13 ---
+# Calculate and Display Results
+
+yolo_prec, yolo_rec, yolo_f1 = calculate_metrics(yolo_results['tp'], yolo_results['fp'], yolo_results['fn'])
+hybrid_prec, hybrid_rec, hybrid_f1 = calculate_metrics(hybrid_results['tp'], hybrid_results['fp'], hybrid_results['fn'])
+
+prec_improvement = ((hybrid_prec - yolo_prec) / yolo_prec * 100) if yolo_prec > 0 else 0
+rec_improvement = ((hybrid_rec - yolo_rec) / yolo_rec * 100) if yolo_rec > 0 else 0
+f1_improvement = ((hybrid_f1 - yolo_f1) / yolo_f1 * 100) if yolo_f1 > 0 else 0
+fp_reduction = ((yolo_results['fp'] - hybrid_results['fp']) / yolo_results['fp'] * 100) if yolo_results['fp'] > 0 else 0
+fn_reduction = ((yolo_results['fn'] - hybrid_results['fn']) / yolo_results['fn'] * 100) if yolo_results['fn'] > 0 else 0
+
+print("\n" + "="*80)
+print("📊 RESULTS SUMMARY")
+print("="*80)
+
+print("\n1️⃣  YOLO-Only Baseline:")
+print(f"   Precision: {yolo_prec:.4f}")
+print(f"   Recall:    {yolo_rec:.4f}")
+print(f"   F1-Score:  {yolo_f1:.4f}")
+print(f"   TP: {yolo_results['tp']}, FP: {yolo_results['fp']}, FN: {yolo_results['fn']}")
+
+print("\n2️⃣  YOLO + SAM Hybrid:")
+print(f"   Precision: {hybrid_prec:.4f} ({prec_improvement:+.2f}%)")
+print(f"   Recall:    {hybrid_rec:.4f} ({rec_improvement:+.2f}%)")
+print(f"   F1-Score:  {hybrid_f1:.4f} ({f1_improvement:+.2f}%)")
+print(f"   TP: {hybrid_results['tp']}, FP: {hybrid_results['fp']}, FN: {hybrid_results['fn']}")
+
+print("\n3️⃣  SAM Improvement Metrics:")
+print(f"   False Positive Reduction: {fp_reduction:.2f}%")
+print(f"   False Negative Reduction: {fn_reduction:.2f}%")
+print(f"   Precision Improvement:    {prec_improvement:+.2f}%")
+print(f"   Recall Improvement:       {rec_improvement:+.2f}%")
+print(f"   F1-Score Improvement:     {f1_improvement:+.2f}%")
+
+if decision_paths:
+    path_counts = Counter(decision_paths)
+    total = len(decision_paths)
+    print("\n4️⃣  Decision Path Distribution:")
+    for path in ['Fast Safe', 'Fast Violation', 'Rescue Head', 'Rescue Body', 'Critical']:
+        count = path_counts.get(path, 0)
+        pct = (count / total * 100) if total > 0 else 0
+        print(f"   {path:20s}: {count:4d} ({pct:5.1f}%)")
+
+    sam_paths = ['Rescue Head', 'Rescue Body', 'Critical']
+    sam_count = sum([path_counts.get(p, 0) for p in sam_paths])
+    sam_rate = (sam_count / total * 100) if total > 0 else 0
+    print(f"   {'SAM Activation Rate':20s}: {sam_count:4d} ({sam_rate:5.1f}%)")
+
+print("="*80)
+
+--- CELL 14 ---
+# Generate Comparison Visualization
+
+fig = plt.figure(figsize=(18, 10))
+gs = fig.add_gridspec(2, 3, hspace=0.3, wspace=0.3)
+
+# 1. Metrics Comparison
+ax1 = fig.add_subplot(gs[0, 0])
+metrics = ['Precision', 'Recall', 'F1-Score']
+yolo_vals = [yolo_prec, yolo_rec, yolo_f1]
+hybrid_vals = [hybrid_prec, hybrid_rec, hybrid_f1]
+x = np.arange(len(metrics))
+width = 0.35
+bars1 = ax1.bar(x - width/2, yolo_vals, width, label='YOLO Only', color='#FF6B6B', alpha=0.8)
+bars2 = ax1.bar(x + width/2, hybrid_vals, width, label='YOLO + SAM', color='#4ECDC4', alpha=0.8)
+ax1.set_ylabel('Score', fontsize=12, fontweight='bold')
+ax1.set_title('Performance Metrics Comparison', fontsize=14, fontweight='bold')
+ax1.set_xticks(x)
+ax1.set_xticklabels(metrics)
+ax1.legend()
+ax1.set_ylim(0, 1.0)
+ax1.grid(axis='y', alpha=0.3)
+for bars in [bars1, bars2]:
+    for bar in bars:
+        height = bar.get_height()
+        ax1.text(bar.get_x() + bar.get_width()/2., height + 0.02,
+                f'{height:.3f}', ha='center', va='bottom', fontsize=9)
+
+# 2. Improvement Percentages
+ax2 = fig.add_subplot(gs[0, 1])
+improvements = ['Precision', 'Recall', 'F1-Score']
+improvement_vals = [prec_improvement, rec_improvement, f1_improvement]
+colors = ['#2ECC71' if v > 0 else '#E74C3C' for v in improvement_vals]
+bars = ax2.barh(improvements, improvement_vals, color=colors, alpha=0.8)
+ax2.set_xlabel('Improvement (%)', fontsize=12, fontweight='bold')
+ax2.set_title('SAM Improvement Over YOLO-Only', fontsize=14, fontweight='bold')
+ax2.axvline(x=0, color='black', linestyle='-', linewidth=0.8)
+ax2.grid(axis='x', alpha=0.3)
+for i, (bar, val) in enumerate(zip(bars, improvement_vals)):
+    ax2.text(val + 1 if val > 0 else val - 1, i, f'{val:+.1f}%',
+            va='center', ha='left' if val > 0 else 'right', fontsize=10, fontweight='bold')
+
+# 3. Error Reduction
+ax3 = fig.add_subplot(gs[0, 2])
+error_types = ['False Positives', 'False Negatives']
+yolo_errors = [yolo_results['fp'], yolo_results['fn']]
+hybrid_errors = [hybrid_results['fp'], hybrid_results['fn']]
+x = np.arange(len(error_types))
+bars1 = ax3.bar(x - width/2, yolo_errors, width, label='YOLO Only', color='#FF6B6B', alpha=0.8)
+bars2 = ax3.bar(x + width/2, hybrid_errors, width, label='YOLO + SAM', color='#4ECDC4', alpha=0.8)
+ax3.set_ylabel('Count', fontsize=12, fontweight='bold')
+ax3.set_title('Error Reduction', fontsize=14, fontweight='bold')
+ax3.set_xticks(x)
+ax3.set_xticklabels(error_types, rotation=15)
+ax3.legend()
+ax3.grid(axis='y', alpha=0.3)
+
+# 4. Decision Path Distribution
+if decision_paths:
+    ax4 = fig.add_subplot(gs[1, :2])
+    path_counts = Counter(decision_paths)
+    paths = ['Fast Safe', 'Fast Violation', 'Rescue Head', 'Rescue Body', 'Critical']
+    counts = [path_counts.get(p, 0) for p in paths]
+    total = sum(counts)
+    percentages = [c/total*100 if total > 0 else 0 for c in counts]
+    colors_map = ['#2ECC71', '#E74C3C', '#F39C12', '#E67E22', '#8E44AD']
+    bars = ax4.bar(paths, percentages, color=colors_map, alpha=0.8)
+    for bar, pct in zip(bars, percentages):
+        height = bar.get_height()
+        ax4.text(bar.get_x() + bar.get_width()/2., height + 1,
+                f'{pct:.1f}%', ha='center', va='bottom', fontsize=11, fontweight='bold')
+    ax4.set_ylabel('Percentage (%)', fontsize=12, fontweight='bold')
+    ax4.set_xlabel('Decision Path', fontsize=12, fontweight='bold')
+    ax4.set_title('Distribution of Decision Paths', fontsize=14, fontweight='bold')
+    ax4.axhline(y=15, color='blue', linestyle='--', label='Expected SAM Threshold', linewidth=2)
+    ax4.legend()
+    plt.setp(ax4.xaxis.get_majorticklabels(), rotation=15)
+    ax4.grid(axis='y', alpha=0.3)
+
+# 5. Error Reduction Rate
+ax5 = fig.add_subplot(gs[1, 2])
+reduction_labels = ['FP Reduction', 'FN Reduction']
+reduction_values = [fp_reduction, fn_reduction]
+colors_red = ['#2ECC71' if v > 0 else '#E74C3C' for v in reduction_values]
+bars = ax5.barh(reduction_labels, reduction_values, color=colors_red, alpha=0.8)
+ax5.set_xlabel('Reduction (%)', fontsize=12, fontweight='bold')
+ax5.set_title('Error Reduction Rate', fontsize=14, fontweight='bold')
+ax5.axvline(x=0, color='black', linestyle='-', linewidth=0.8)
+ax5.grid(axis='x', alpha=0.3)
+for i, (bar, val) in enumerate(zip(bars, reduction_values)):
+    ax5.text(val + 2 if val > 0 else val - 2, i, f'{val:.1f}%',
+            va='center', ha='left' if val > 0 else 'right', fontsize=11, fontweight='bold')
+
+plt.suptitle('Quantitative SAM Improvement Analysis', fontsize=16, fontweight='bold', y=0.98)
+plt.savefig(f'{config.OUTPUT_DIR}/comparison_plots.png', dpi=300, bbox_inches='tight')
+plt.show()
+
+print(f"\n✅ Visualization saved to {config.OUTPUT_DIR}/comparison_plots.png")
+
+================================================================================
+=== Hierarchical_Decision_and_Agentic_System_(YOLO_+_SAM_3_+_Agent).ipynb ===
+================================================================================
+
+--- CELL 0 ---
+# @title 1. Install Dependencies
+!pip install -q ultralytics langchain-openai reportlab opencv-python-headless
+!pip install -q git+https://github.com/facebookresearch/segment-anything.git
+
+import os
+import cv2
+import sys
+import json
+import smtplib
+import torch
+import numpy as np
+import matplotlib.pyplot as plt
+from datetime import datetime
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+from email.mime.application import MIMEApplication
+from reportlab.lib import colors
+from reportlab.lib.pagesizes import letter
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image as ReportLabImage, Table, TableStyle
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from langchain_openai import ChatOpenAI
+from langchain_core.prompts import PromptTemplate
+from google.colab import userdata
+
+# Create directories
+os.makedirs('/content/violations', exist_ok=True)
+os.makedirs('/content/reports', exist_ok=True)
+
+print("✅ Dependencies installed and directories created.")
+
+--- CELL 1 ---
+# @title 2. Global Configuration
+class Config:
+    # --- SITE INFO ---
+    SITE_NAME = "Construction Site A"
+    SITE_LOCATION = "Zone 3, Building B"
+    COMPANY_NAME = "SafeBuild Construction Inc."
+
+    # --- PATHS ---
+    IMAGE_PATH = '/content/Worker-working-without-safety-boots-hand-gloves-head-protection_Q320.jpg'
+    YOLO_WEIGHTS = '/content/best.pt'
+    SAM_WEIGHTS = '/content/sam3.pt'
+    VIOLATIONS_DIR = '/content/violations'
+    REPORTS_DIR = '/content/reports'
+
+
+    # --- API KEYS (Try Colab Secrets first, else Manual) ---
+    try:
+        HF_TOKEN = userdata.get('HF_TOKEN')
+        OPENAI_API_KEY = userdata.get('OPENAI_API_KEY')
+        EMAIL_SENDER = userdata.get('EMAIL_SENDER')
+        EMAIL_PASSWORD = userdata.get('EMAIL_PASSWORD') # Gmail App Password
+        EMAIL_RECIPIENTS = userdata.get('EMAIL_RECIPIENTS', '').split(',')
+    except:
+        # FALLBACK: Enter keys here if not using Colab Secrets
+        OPENAI_API_KEY = "sk-..."
+        EMAIL_SENDER = "your_email@gmail.com"
+        EMAIL_PASSWORD = "your_app_password"
+        EMAIL_RECIPIENTS = ["manager@example.com"]
+
+    # --- SETTINGS ---
+    EMAIL_ENABLED = True # Set to True to actually send emails
+    SAM_IMAGE_SIZE = 1024
+    CONFIDENCE_THRESHOLD = 0.4
+
+    # --- CLASS MAPPING ---
+    TARGET_CLASSES = {
+        'person': [6],
+        'helmet': [1],
+        'vest': [2],
+        'no_helmet': [7]
+    }
+
+config = Config()
+print(f"⚙️ Configuration loaded for {config.SITE_NAME}")
+
+--- CELL 2 ---
+from huggingface_hub import hf_hub_download, login
+from huggingface_hub import login
+login(new_session=False)
+
+--- CELL 3 ---
+#!wget --header="Authorization: Bearer YOUR_HF_TOKEN" "https://huggingface.co/facebook/sam3/resolve/main/sam3.pt"
+
+
+--- CELL 6 ---
+# @title 4. Phase 2: AI Compliance Agent
+class ComplianceAgent:
+    def __init__(self):
+        self.has_key = config.OPENAI_API_KEY and config.OPENAI_API_KEY.startswith("sk-")
+        if self.has_key:
+            self.llm = ChatOpenAI(model="gpt-4", openai_api_key=config.OPENAI_API_KEY, temperature=0.3)
+            self.prompt = PromptTemplate(
+                input_variables=["date", "time", "location", "description", "missing"],
+                template="""
+                    You are an OSHA Safety Compliance Officer.
+                    Details: {date} at {location}.
+                    Violation: {description}. Missing: {missing}.
+
+                    Generate a Citation Report Section:
+                    1. **Regulation Cited:** (Map '{missing}' to specific OSHA 1926 codes).
+                    2. **Observation:** (Professional description of the worker's non-compliance).
+                    3. **Severity:** (High/Medium/Low based on the missing gear).
+                    4. **Required Action:** (Immediate corrective steps).
+                    """
+            )
+        else:
+            print("⚠️ Agent initialized in MOCK mode (No API Key)")
+
+    def generate_report_text(self, violation):
+        if not self.has_key:
+            return f"""
+            **MOCK AI REPORT**
+            **Incident:** {violation['description']} detected at {violation['location']}.
+            **Regulation:** Likely violates OSHA 1926.100 (Head Protection) or 1926.102 (PPE).
+            **Action:** Immediately halt work and provide required PPE to the worker.
+            """
+
+        try:
+            chain = self.prompt | self.llm
+            response = chain.invoke({
+                "date": violation['timestamp'].strftime("%Y-%m-%d"),
+                "time": violation['timestamp'].strftime("%H:%M:%S"),
+                "location": violation['location'],
+                "description": violation['description'],
+                "missing": ", ".join(violation['missing_items'])
+            })
+            return response.content
+        except Exception as e:
+            return f"Error generating AI report: {e}"
+
+agent = ComplianceAgent()
+print("✅ Agent Ready")
+
+--- CELL 7 ---
+# @title 5. Phase 3: PDF Report Generator
+class PDFGenerator:
+    def generate_pdf(self, violation, report_text):
+        filename = f"{config.REPORTS_DIR}/Incident_{violation['timestamp'].strftime('%Y%m%d_%H%M%S')}.pdf"
+        doc = SimpleDocTemplate(filename, pagesize=letter)
+        styles = getSampleStyleSheet()
+        story = []
+
+        # Header
+        story.append(Paragraph(f"SAFETY INCIDENT REPORT", styles['Title']))
+        story.append(Spacer(1, 12))
+
+        # Meta Data Table
+        data = [
+            ["Date:", violation['timestamp'].strftime("%Y-%m-%d %H:%M:%S")],
+            ["Site:", config.SITE_NAME],
+            ["Location:", config.SITE_LOCATION],
+            ["Violation Type:", violation['description']]
+        ]
+        t = Table(data, colWidths=[100, 300])
+        t.setStyle(TableStyle([('FONT', (0,0), (-1,-1), 'Helvetica-Bold'), ('GRID', (0,0), (-1,-1), 1, colors.black)]))
+        story.append(t)
+        story.append(Spacer(1, 20))
+
+        # Evidence Image
+        if os.path.exists(violation['image_path']):
+            im = ReportLabImage(violation['image_path'], width=400, height=300)
+            story.append(im)
+            story.append(Paragraph("Fig 1. Automated Detection Evidence", styles['Italic']))
+            story.append(Spacer(1, 20))
+
+        # AI Analysis Section
+        story.append(Paragraph("Officer Analysis (AI Generated):", styles['Heading2']))
+        story.append(Paragraph(report_text.replace("\n", "<br/>"), styles['Normal']))
+
+        # Footer
+        story.append(Spacer(1, 30))
+        story.append(Paragraph(f"Generated by {config.COMPANY_NAME} Safety System", styles['Italic']))
+
+        doc.build(story)
+        print(f"📄 PDF Generated: {filename}")
+        return filename
+
+pdf_gen = PDFGenerator()
+print("✅ PDF Generator Ready")
+
+--- CELL 8 ---
+# @title 6. Phase 4: Email Notification System
+class NotificationService:
+    def send_email(self, violation, pdf_path):
+        if not config.EMAIL_ENABLED:
+            print(f"📧 EMAIL SKIPPED (Config Disabled). Report saved at {pdf_path}")
+            return
+
+        msg = MIMEMultipart()
+        msg['From'] = config.EMAIL_SENDER
+        msg['To'] = ", ".join(config.EMAIL_RECIPIENTS)
+        msg['Subject'] = f"🚨 Safety Violation: {violation['description']}"
+
+        body = f"""
+        URGENT: Safety Violation Detected
+
+        Site: {config.SITE_NAME}
+        Time: {violation['timestamp']}
+        Violation: {violation['description']}
+
+        Please see attached official report.
+        """
+        msg.attach(MIMEText(body, 'plain'))
+
+        with open(pdf_path, "rb") as f:
+            attach = MIMEApplication(f.read(), _subtype="pdf")
+            attach.add_header('Content-Disposition', 'attachment', filename=os.path.basename(pdf_path))
+            msg.attach(attach)
+
+        try:
+            server = smtplib.SMTP('smtp.gmail.com', 587)
+            server.starttls()
+            server.login(config.EMAIL_SENDER, config.EMAIL_PASSWORD)
+            server.send_message(msg)
+            server.quit()
+            print(f"✅ Email Sent to {config.EMAIL_RECIPIENTS}")
+        except Exception as e:
+            print(f"❌ Email Failed: {e}")
+
+notifier = NotificationService()
+print("✅ Notification Service Ready")
+
+--- CELL 9 ---
+# @title 7. Run Full Ecosystem
+def run_safety_ecosystem(image_path):
+    print("="*60)
+    print("🎬 STARTING SAFETY AUDIT PIPELINE")
+    print("="*60)
+
+    # 1. DETECT
+    print("\n🔍 PHASE 1: Detection")
+    violations = detector.detect(image_path)
+
+    if not violations:
+        print("✅ No violations detected. Site is safe.")
+        return
+
+    print(f"⚠️  Found {len(violations)} Violations. Processing...")
+
+    for v in violations:
+        print(f"   👉 Processing: {v['description']}")
+
+        # 2. AGENT
+        print("   🤖 PHASE 2: AI Agent Analysis")
+        report_text = agent.generate_report_text(v)
+
+        # 3. REPORT
+        print("   📄 PHASE 3: Generating Documents")
+        pdf_path = pdf_gen.generate_pdf(v, report_text)
+
+        # 4. NOTIFY
+        print("   Aa PHASE 4: Notification")
+        notifier.send_email(v, pdf_path)
+
+    print("\n✅ PIPELINE COMPLETE")
+    print("="*60)
+
+# Run it
+if os.path.exists(config.IMAGE_PATH):
+    run_safety_ecosystem(config.IMAGE_PATH)
+else:
+    print(f"❌ Error: Image not found at {config.IMAGE_PATH}")

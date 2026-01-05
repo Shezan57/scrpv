@@ -27,10 +27,10 @@ share/python-wheels/
 *.egg-info/
 .installed.cfg
 *.egg
-*.pdf
+# *.pdf
 runs_adamw/
 runs_sgd/
-backup.txt
+# backup.txt
 *.DOCX
 MANIFEST
 
