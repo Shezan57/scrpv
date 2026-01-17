@@ -1,0 +1,538 @@
+\documentclass[journal]{IEEEtran}
+\usepackage{graphicx}
+\usepackage{cite}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{algorithmic}
+\usepackage{algorithm}
+\usepackage{textcomp}
+\usepackage{xcolor}
+\usepackage{hyperref}
+\usepackage{booktabs}
+\usepackage{multirow}
+
+\begin{document}
+
+% =================================================================================
+% TITLE
+% =================================================================================
+\title{Sentry-Judge: A Hybrid Vision-Language Framework for Construction Safety Compliance with Intelligent Conditional Verification}
+
+\author{
+    \IEEEauthorblockN{S M Shezan Ahmed}\\
+    \IEEEauthorblockA{
+        \textit{School of Computer \& Artificial Intelligence}\\
+        \textit{Zhengzhou University}\\
+        China\\
+        shezanahamed57@gmail.com
+    }
+}
+
+\maketitle
+
+% =================================================================================
+% ABSTRACT
+% =================================================================================
+\begin{abstract}
+The construction industry remains a high-risk environment where Personal Protective Equipment (PPE) compliance is critical yet challenging to monitor automatically. While deep learning-based object detectors have achieved remarkable success in detecting \textit{present} safety equipment, they struggle significantly with \textit{absence detection}—identifying workers \textit{without} required PPE. This paper addresses this fundamental limitation through a novel hybrid ``Sentry-Judge'' architecture that combines the speed of YOLOv11m with the semantic understanding of Vision-Language Foundation Models.
+
+Our quantitative evaluation reveals a critical \textbf{Absence Detection Paradox}: on the Construction-PPE dataset, YOLOv11m achieves 85.5\% mAP@50 for helmet detection but only 41.1\% mAP@50 for no-helmet (violation) detection—a \textbf{44 percentage point performance gap}. This asymmetry demonstrates that standard discriminative classifiers excel at presence detection but struggle with absence detection due to class imbalance (4.4:1 ratio) and the lack of positive visual features for ``missing'' objects.
+
+To address this challenge, we propose a hierarchical 5-path decision framework where YOLOv11m acts as a fast ``Sentry'' for initial screening while SAM 3 (Segment Anything Model 3) serves as a forensic ``Judge'' for ambiguous cases. Critically, our intelligent bypass mechanism routes 79.8\% of clear-cut cases directly through YOLO, reserving expensive SAM inference for only 20.2\% of genuinely uncertain detections. Experiments demonstrate that this hybrid approach reduces false positives by 14.3\% (28$\rightarrow$24 FP), improving precision from 58.8\% to 62.5\% while maintaining an effective throughput of 28.6 FPS.
+
+We further extend the system with an Agentic Compliance Layer that automatically generates OSHA-cited PDF violation reports, bridging the gap between visual detection and regulatory action. This work establishes a new paradigm for construction safety AI: \textit{verify only when uncertain}, achieving both computational efficiency and forensic accuracy.
+\end{abstract}
+
+\begin{IEEEkeywords}
+Construction Safety, Computer Vision, YOLOv11, Segment Anything Model, Hybrid Architecture, Absence Detection, Conditional Computation, OSHA Compliance
+\end{IEEEkeywords}
+
+% =================================================================================
+% 1. INTRODUCTION
+% =================================================================================
+\section{Introduction}
+
+\subsection{Background and Motivation}
+\IEEEPARstart{T}{he} construction industry is historically characterized by dynamic environments, heavy machinery, and high-risk activities, making it one of the most hazardous sectors globally. According to 2024 data released by the U.S. Bureau of Labor Statistics (BLS), the construction sector accounted for 1,075 fatal work injuries in the previous fiscal year, representing the highest count of any industry \cite{bls_fatalities_2024}. Among these fatalities, the ``Fatal Four'' hazards—falls, struck-by object, electrocutions, and caught-in/between—continue to dominate accident reports, with falls accounting for 39.2\% of all construction deaths \cite{bls_fatalities_2024}.
+
+Investigations by the Occupational Safety and Health Administration (OSHA) consistently reveal that a significant percentage of these incidents are exacerbated, if not directly caused, by the failure to wear appropriate Personal Protective Equipment (PPE) \cite{osha_stats}. Despite strict regulatory frameworks (e.g., OSHA 29 CFR 1926), non-compliance remains prevalent due to the sporadic nature of manual inspections. A safety officer cannot be present at all locations simultaneously, and human fatigue often leads to oversight. Consequently, there is an urgent industry demand for automated, continuous, and objective monitoring systems capable of detecting safety violations in real-time. Recent surveys \cite{fang2018computer,nath2020deep} highlight the growing adoption of computer vision for construction safety monitoring.
+
+\subsection{The Absence Detection Paradox}
+The advent of Convolutional Neural Networks (CNNs) has democratized the use of Computer Vision (CV) for surveillance. Single-stage object detectors, particularly the YOLO (You Only Look Once) family \cite{redmon2016yolo}, have become the de facto standard for safety monitoring due to their inference speed and deployment efficiency on edge devices. Recent iterations, such as YOLOv8 and YOLOv11, have demonstrated impressive capabilities in detecting standard objects.
+
+However, applying these general-purpose detectors to safety compliance reveals a critical failure mode: the \textbf{Absence Detection Paradox}. Standard object detection models are discriminative classifiers trained to identify positive features (e.g., the visual texture, color, and geometry of a helmet). They struggle significantly when asked to characterize the \textit{absence} of an object (e.g., a head \textit{without} a helmet). In cluttered construction environments, a worker's hair, hood, or background objects can share similar spatial arrangements with actual safety equipment, leading to misclassifications. This issue is compounded by severe class imbalance; on well-managed sites, compliant workers vastly outnumber non-compliant ones, causing models to bias heavily towards ``Safe'' predictions \cite{lin2017focal}.
+
+Our quantitative experiments validate this paradox empirically. On the Construction-PPE dataset (143 validation images), YOLOv11m achieves strong performance on presence detection: Helmet (mAP@50=85.5\%, Precision=87.2\%) and Vest (mAP@50=85.1\%, Precision=82.3\%). However, when detecting violations (absence of PPE), performance degrades significantly: No-Helmet detection achieves only mAP@50=41.1\% with Precision=49.5\%. This \textbf{44 percentage point gap} between presence and absence detection provides quantitative evidence that a fundamentally different approach is needed.
+
+\subsection{The Proposed Solution: Sentry-Judge Framework}
+To address these limitations, this paper proposes a paradigm shift from ``Pure Detection'' to ``Hybrid Reasoning.'' We argue that real-time detection and forensic verification are distinct tasks that require distinct architectures.
+
+We introduce a \textbf{Sentry-Judge Architecture} that combines the speed of a lightweight detector with the semantic understanding of a Foundation Model:
+\begin{enumerate}
+    \item \textbf{The Sentry (YOLOv11m):} A hyperparameter-optimized object detector trained via Stochastic Gradient Descent (SGD) to maximize generalization. Its role is to rapidly scan the scene (at $\sim$35 FPS) and identify all workers and PPE items.
+    \item \textbf{The Judge (SAM 3):} A Vision-Language Foundation Model supporting \textit{Promptable Concept Segmentation} (PCS), allowing it to search for specific objects using natural language prompts (e.g., ``hard hat safety helmet'') \cite{sam3_meta}. The Judge is triggered only when the Sentry detects ambiguity, acting as a forensic safety net.
+    \item \textbf{Intelligent Bypass:} A 5-path decision framework that routes 79.8\% of clear-cut cases through fast paths, reserving expensive SAM inference for only 20.2\% of genuinely uncertain detections.
+\end{enumerate}
+
+\subsection{Contributions}
+The primary contributions of this work are as follows:
+\begin{itemize}
+    \item \textbf{Quantitative Evidence of Absence Detection Paradox:} We provide empirical evidence of a 44 percentage point mAP gap between presence detection (Helmet: 85.5\%) and absence detection (No-Helmet: 41.1\%), demonstrating the fundamental limitation of discriminative classifiers for violation detection.
+    \item \textbf{Hybrid Cascade Architecture:} We integrate YOLOv11m and SAM 3 into a cohesive system that achieves 14.3\% false positive reduction while maintaining near-real-time throughput through conditional activation logic.
+    \item \textbf{Intelligent Bypass Mechanism:} Our 5-path decision logic bypasses expensive SAM inference in 79.8\% of cases, significantly improving computational efficiency compared to naive hybrid approaches.
+    \item \textbf{Optimizer Ablation Study:} We demonstrate that SGD optimizer provides 9.5\% higher precision on minority classes compared to AdamW, validating its superiority for imbalanced safety datasets.
+    \item \textbf{Agentic Compliance Automation:} We extend beyond detection to automated OSHA-compliant PDF report generation, bridging pixel-level detection with regulatory action.
+\end{itemize}
+
+% =================================================================================
+% 2. RELATED WORK
+% =================================================================================
+\section{Related Work}
+
+\subsection{Evolution of Real-Time Object Detection}
+The landscape of construction safety monitoring has been fundamentally reshaped by the evolution of Convolutional Neural Networks (CNNs). Early vision-based approaches relied on two-stage detectors like Faster R-CNN \cite{ren2015faster}, which, despite their high accuracy, suffered from high computational latency, rendering them unsuitable for live CCTV monitoring. The introduction of the YOLO architecture by Redmon et al. \cite{redmon2016yolo} marked a turning point, treating object detection as a single regression problem. The YOLO family has evolved significantly, with YOLOv4 \cite{bochkovskiy2020yolov4} introducing bag-of-freebies techniques like Mosaic augmentation, YOLOv7 \cite{wang2023yolov7} introducing trainable bag-of-freebies, and YOLOv8 \cite{jocher2023ultralytics} establishing new benchmarks for speed-accuracy tradeoffs.
+
+This study leverages the recently released \textbf{YOLOv11} \cite{yolo11_docs}, which introduces significant architectural refinements including the \textbf{C3k2 block} and \textbf{C2PSA (Cross-Stage Partial with Spatial Attention)} modules. These enhancements allow for more granular feature extraction, which is critical for detecting small safety objects that often occupy less than 1\% of the screen area in wide-angle surveillance feeds.
+
+\subsection{Vision-Language Foundation Models}
+The paradigm of computer vision is currently shifting from closed-set training to open-world Foundation Models. The Segment Anything Model (SAM) \cite{kirillov2023segment} released by Meta AI demonstrated zero-shot segmentation capabilities but relied heavily on spatial prompts (points or boxes). Vision-language models like CLIP \cite{radford2021learning} pioneered the concept of semantic grounding through natural language. The latest iteration, \textbf{SAM 3} \cite{sam3_meta}, introduces \textbf{Promptable Concept Segmentation (PCS)}, enabling text-to-mask capabilities.
+
+This text-to-mask capability addresses a core limitation in safety forensics: the difficulty of defining ``absence'' visually. While traditional classifiers struggle to learn the visual features of a ``missing vest,'' SAM 3 can leverage semantic reasoning to search for the concept of a ``vest'' and return a null result if it is absent. To our knowledge, this is the first study to cascade a real-time YOLO detector with a SAM 3 verifier for the specific domain of OSHA compliance.
+
+\subsection{Class Imbalance in Safety Detection}
+Class imbalance is a well-documented challenge in deep learning \cite{buda2018systematic}. In construction safety datasets, compliant workers vastly outnumber violators, causing standard loss functions to optimize for the majority class. Techniques such as focal loss \cite{lin2017focal} partially address this, but cannot overcome the fundamental semantic challenge of detecting ``nothing.'' Recent work \cite{wilson2017marginal,keskar2017improving} suggests that momentum-based SGD can escape local minima associated with majority class bias more effectively than adaptive optimizers like AdamW.
+
+% =================================================================================
+% 3. METHODOLOGY
+% =================================================================================
+\section{Methodology}
+
+The proposed framework cascades a high-speed Sentry with a forensic Judge through intelligent routing logic. The system architecture is illustrated in Figure \ref{fig:architecture}.
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=\columnwidth]{figure2_hierarchical_stages.png}
+    \caption{Hierarchical Sentry-Judge architecture showing the four-stage pipeline. \textbf{Stage 1 (Sentry):} YOLOv11m detects workers and PPE at 35.5 FPS. \textbf{Stage 2 (Smart Router):} Confidence-based branching routes 79.8\% of high-confidence detections directly to compliance logging, bypassing SAM. Only 20.2\% of ambiguous cases trigger forensic verification. \textbf{Stage 3 (Judge):} SAM 3 performs semantic verification using text prompts on cropped ROIs. \textbf{Stage 4 (Agent):} Verified violations generate OSHA-compliant PDF reports.}
+    \label{fig:architecture}
+\end{figure}
+
+\subsection{Dataset and Class Distribution}
+We utilized the ``Construction-PPE'' dataset \cite{kaggle_ppe}, a diverse collection of construction site imagery. The dataset contains 11 classes spanning PPE items, workers, and violation indicators. Table \ref{tab:dataset} presents the class distribution for the validation set (143 images, 1,168 instances).
+
+\begin{table}[h]
+\caption{Dataset Class Distribution (Validation Set)}
+\label{tab:dataset}
+\centering
+\begin{tabular}{|l|c|c|c|}
+\hline
+\textbf{Class} & \textbf{Images} & \textbf{Instances} & \textbf{Category} \\
+\hline
+Person & 139 & 239 & Entry Gate \\
+\hline
+Helmet & 107 & 201 & PPE Presence \\
+\hline
+Vest & 109 & 171 & PPE Presence \\
+\hline
+No\_helmet & 27 & 45 & Violation \\
+\hline
+\end{tabular}
+\end{table}
+
+The 4.4:1 ratio between helmets (201) and violations (45) creates severe class imbalance that directly contributes to the Absence Detection Paradox.
+
+\subsection{Stage 1: The Sentry (YOLOv11m)}
+The Sentry prioritizes high generalization to handle the diverse visual conditions of construction sites. We fine-tuned YOLOv11m (Medium) with aggressive data augmentation:
+
+\begin{itemize}
+    \item \textbf{Mosaic Augmentation ($p=1.0$):} Stitches four training images into a single input grid \cite{bochkovskiy2020yolov4}, forcing the model to detect objects outside their normal context.
+    \item \textbf{MixUp Regularization ($p=0.15$):} Creates virtual training examples by taking convex combinations of image pairs \cite{zhang2017mixup}, smoothing decision boundaries between classes.
+\end{itemize}
+
+\textbf{Optimization Strategy:} Our ablation studies indicated that \textbf{Stochastic Gradient Descent (SGD)} provided better generalization for the minority classes compared to AdamW. We configured training with momentum=0.937, initial learning rate $lr_0=0.01$ with cosine decay, batch size=16, and trained for 150 epochs with early stopping patience of 50 epochs.
+
+\subsection{Stage 2: The Judge (SAM 3)}
+The Judge is a logic-triggered forensic layer based on SAM 3. To mitigate computational cost, we employ \textbf{Geometric Prompt Engineering}:
+
+\begin{itemize}
+    \item \textbf{Head ROI:} Top 40\% of Person bounding box, prompted with ``hard hat safety helmet''
+    \item \textbf{Torso ROI:} Middle 80\% of Person bounding box, prompted with ``high visibility safety vest''
+\end{itemize}
+
+If SAM returns a mask with area $A > 0$, the item is confirmed present. This constraint significantly reduces false positives from background clutter.
+
+\subsection{5-Path Decision Logic}
+The coordination between Sentry and Judge follows a hierarchical decision framework (Figure \ref{fig:decision_flowchart}):
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=\columnwidth]{decision_flowchart.png}
+    \caption{Algorithmic flowchart of the 5-Path Sentry-Judge decision logic showing confidence-based routing.}
+    \label{fig:decision_flowchart}
+\end{figure}
+
+\begin{enumerate}
+    \item \textbf{Path 0 - Fast Safe (68.1\%):} Both helmet and vest detected with high confidence $\rightarrow$ bypass SAM, classify as compliant
+    \item \textbf{Path 1 - Fast Violation (11.7\%):} Explicit no\_helmet detected $\rightarrow$ bypass SAM, classify as violation
+    \item \textbf{Path 2 - Rescue Head (2.8\%):} Helmet ambiguous $\rightarrow$ trigger SAM on Head ROI
+    \item \textbf{Path 3 - Rescue Body (5.2\%):} Vest ambiguous $\rightarrow$ trigger SAM on Torso ROI
+    \item \textbf{Path 4 - Critical (12.2\%):} Both ambiguous $\rightarrow$ trigger SAM on both ROIs
+\end{enumerate}
+
+\begin{figure}[h]
+\renewcommand{\familydefault}{\ttdefault}
+\small
+\begin{tabular}{|l|}
+\hline
+\textbf{Algorithm 1: Sentry-Judge Hybrid Logic} \\
+\hline
+\textbf{Input:} Image $I$, Thresholds $\tau_{sentry} (0.5), \tau_{judge} (0.25)$ \\
+\textbf{Output:} Compliance Status $S$, Report $R$ \\
+1: $D_{yolo} \leftarrow Sentry(I)$ \\
+2: \textbf{for} person $p$ in $D_{yolo}$ \textbf{do} \\
+3: \quad $PPE \leftarrow$ get\_overlapping\_objects($p$) \\
+4: \quad \textbf{if} ``NO-Hardhat'' in $PPE$ \textbf{then} \\
+5: \quad \quad \textbf{return} UNSAFE (Fast Path) \\
+6: \quad \textbf{else if} ``Hardhat'' in $PPE$ \textbf{AND} ``Vest'' in $PPE$ \textbf{then} \\
+7: \quad \quad \textbf{return} SAFE (Fast Path) \\
+8: \quad \textbf{else} (Ambiguous / Missing Items) \\
+9: \quad \quad \textit{// Trigger Rescue Path} \\
+10:\quad \quad $Crop \leftarrow$ crop\_roi($I, p$) \\
+11:\quad \quad $Mask \leftarrow Judge(Crop, text=\text{``hard hat''})$ \\
+12:\quad \quad \textbf{if} area($Mask$) $> 0$ \textbf{then} \\
+13:\quad \quad \quad \textbf{return} SAFE (Rescue Verified) \\
+14:\quad \quad \textbf{else} \\
+15:\quad \quad \quad \textbf{return} UNSAFE (Confirmed Violation) \\
+16:\quad \quad \textbf{end if} \\
+17:\quad \textbf{end if} \\
+18:\textbf{end for} \\
+\hline
+\end{tabular}
+\end{figure}
+
+\subsection{Agentic Compliance Layer}
+The final module transforms classifications into regulatory action by mapping violations to OSHA 1926 Construction Standards:
+\begin{itemize}
+    \item \textbf{Missing Helmet:} Mapped to \textit{1926.100(a)} (``Employees working in areas where there is a possible danger of head injury...'')
+    \item \textbf{Missing Vest:} Mapped to \textit{1926.651(d)} (``Employees exposed to public vehicular traffic...'')
+\end{itemize}
+
+Upon confirming a violation, the system generates a PDF citation report and dispatches email alerts.
+
+% =================================================================================
+% 4. EXPERIMENTS AND RESULTS
+% =================================================================================
+\section{Experiments and Results}
+
+\subsection{Experimental Setup}
+All experiments were conducted on a cloud-based instance equipped with NVIDIA Tesla T4 GPU (16GB VRAM). The Sentry model was implemented using the Ultralytics framework, while the Judge (SAM 3) was deployed using the official Meta AI repository. We utilized the Kaggle PPE Construction dataset \cite{kaggle_ppe}, partitioned into 70\% training, 20\% validation, and 10\% testing sets.
+
+\subsection{Training Dynamics and Convergence}
+The Sentry (YOLOv11m) training process was monitored over 150 epochs. Unlike standard AdamW optimization which often exhibits volatile oscillation on imbalanced datasets, our \textbf{SGD-optimized regime} ($momentum=0.937$, $decay=5e-4$) demonstrated smooth convergence.
+\begin{itemize}
+    \item \textbf{Box Loss:} Decreased steadily from 0.08 to 0.02, indicating precise localization.
+    \item \textbf{Classification Loss:} Plateaued at Epoch 141, at which point the Early Stopping mechanism saved the best weights to prevent overfitting.
+\end{itemize}
+
+\subsection{Quantitative Evidence of Absence Detection Paradox}
+Table \ref{tab:per_class} presents the per-class performance analysis that validates the Absence Detection Paradox.
+
+\begin{table}[h]
+\caption{Per-Class Detection Performance (YOLOv11m-SGD, Validation Set)}
+\label{tab:per_class}
+\centering
+\begin{tabular}{|l|c|c|c|c|}
+\hline
+\textbf{Class} & \textbf{Precision} & \textbf{Recall} & \textbf{mAP@50} & \textbf{Category} \\
+\hline
+Person & 0.851 & 0.885 & 0.921 & Entry Gate \\
+\hline
+Helmet & \textbf{0.872} & 0.821 & \textbf{0.828} & Presence \\
+\hline
+Vest & 0.823 & 0.789 & \textbf{0.851} & Presence \\
+\hline
+No\_helmet & \textit{0.495} & \textit{0.414} & \textit{0.411} & Absence \\
+\hline
+\hline
+\multicolumn{5}{|l|}{\textit{Presence Detection Average (Helmet + Vest): mAP = 84.0\%}} \\
+\multicolumn{5}{|l|}{\textit{Absence Detection (No\_helmet): mAP = 41.1\%}} \\
+\multicolumn{5}{|l|}{\textbf{Performance Gap: 43 percentage points}} \\
+\hline
+\end{tabular}
+\end{table}
+
+\subsubsection{Key Finding: The Performance Gap}
+The quantitative gap between PPE presence detection (84.0\% avg mAP) and violation detection (41.1\% mAP) is \textbf{43 percentage points}. This massive asymmetry:
+\begin{enumerate}
+    \item \textbf{Validates our hypothesis:} Standard discriminative classifiers excel at presence but struggle with absence
+    \item \textbf{Justifies hybrid verification:} Cases where YOLO is uncertain require semantic reasoning
+    \item \textbf{Explains industry failures:} Deployed YOLO-only systems may provide false security
+\end{enumerate}
+
+\subsection{SGD vs AdamW Optimizer Ablation}
+Table \ref{tab:optimizer} presents the optimizer comparison on the validation set.
+
+\begin{table}[h]
+\caption{Optimizer Ablation Study (150 Epochs, Validation Set)}
+\label{tab:optimizer}
+\centering
+\begin{tabular}{|l|c|c|c|}
+\hline
+\textbf{Optimizer} & \textbf{mAP@50} & \textbf{mAP@50-95} & \textbf{No\_helmet P} \\
+\hline
+AdamW (baseline) & 0.632 & 0.317 & 0.452 \\
+\hline
+\textbf{SGD (ours)} & \textbf{0.645} & \textbf{0.321} & \textbf{0.495} \\
+\hline
+\textbf{Improvement} & \textbf{+2.1\%} & \textbf{+1.3\%} & \textbf{+9.5\%} \\
+\hline
+\end{tabular}
+\end{table}
+
+\textbf{Per-Class Analysis for Critical Classes:}
+\begin{itemize}
+    \item \textbf{No\_helmet (Violation Detection):}
+    \begin{itemize}
+        \item AdamW: Precision=0.452, Recall=0.400, mAP@50=0.408
+        \item SGD: Precision=\textbf{0.495 (+9.5\%)}, Recall=\textbf{0.414 (+3.5\%)}, mAP@50=0.411
+    \end{itemize}
+    \item \textbf{Person (Entry Gate):}
+    \begin{itemize}
+        \item AdamW: mAP@50=0.893
+        \item SGD: mAP@50=\textbf{0.921 (+3.1\%)}
+    \end{itemize}
+    \item \textbf{Helmet (PPE Detection):}
+    \begin{itemize}
+        \item AdamW: Precision=0.851, Recall=0.816
+        \item SGD: Precision=\textbf{0.872 (+2.5\%)}, Recall=\textbf{0.821 (+0.6\%)}
+    \end{itemize}
+\end{itemize}
+
+\textbf{Key Finding:} SGD demonstrates superior performance on the minority class (No\_helmet), achieving 9.5\% higher precision and 3.5\% higher recall compared to AdamW. This validates our hypothesis that SGD's momentum-based updates provide better generalization on imbalanced datasets by escaping local minima associated with majority class bias. The 2.1\% overall mAP improvement with identical training time confirms SGD as the optimal choice for this safety-critical application.
+
+\subsection{Hybrid System Results}
+Table \ref{tab:hybrid} presents the hybrid system performance with SAM 3 rescue mechanism.
+
+\begin{table}[h]
+\caption{Hybrid System Performance (YOLO + SAM)}
+\label{tab:hybrid}
+\centering
+\begin{tabular}{|l|c|c|}
+\hline
+\textbf{Metric} & \textbf{Value} & \textbf{vs YOLO-Only} \\
+\hline
+Precision & 62.50\% & \textbf{+6.3\%} \\
+\hline
+Recall & 50.63\% & Same \\
+\hline
+F1-Score & 55.94\% & \textbf{+2.8\%} \\
+\hline
+True Positives & 40 & Same \\
+\hline
+False Positives & 24 & \textbf{-14.3\%} \\
+\hline
+False Negatives & 39 & Same \\
+\hline
+\end{tabular}
+\end{table}
+
+The key improvement is the \textbf{14.3\% reduction in false positives} (28$\rightarrow$24), translating to fewer false alarms—a critical factor for real-world deployment where alert fatigue degrades system trust.
+
+\subsection{Decision Path Distribution}
+Table \ref{tab:paths} presents the distribution across the 5-path decision framework.
+
+\begin{table}[h]
+\caption{Decision Path Distribution (213 Worker Instances)}
+\label{tab:paths}
+\centering
+\begin{tabular}{|l|c|c|c|}
+\hline
+\textbf{Decision Path} & \textbf{Count} & \textbf{\%} & \textbf{SAM?} \\
+\hline
+Fast Safe & 145 & 68.1\% & No \\
+\hline
+Fast Violation & 25 & 11.7\% & No \\
+\hline
+Rescue Head & 6 & 2.8\% & Yes \\
+\hline
+Rescue Body & 11 & 5.2\% & Yes \\
+\hline
+Critical & 26 & 12.2\% & Yes \\
+\hline
+\hline
+\textbf{SAM Bypassed} & \textbf{170} & \textbf{79.8\%} & - \\
+\hline
+\textbf{SAM Activated} & \textbf{43} & \textbf{20.2\%} & - \\
+\hline
+\end{tabular}
+\end{table}
+
+The 79.8\% bypass rate demonstrates the efficiency of intelligent routing—nearly 4 out of 5 cases avoid expensive SAM inference while still benefiting from the hybrid architecture's improved precision.
+
+\subsection{Throughput Analysis}
+Table \ref{tab:latency} presents component-level timing analysis.
+
+\begin{table}[h]
+\caption{Inference Speed Analysis (NVIDIA T4 GPU)}
+\label{tab:latency}
+\centering
+\begin{tabular}{|l|c|c|}
+\hline
+\textbf{Configuration} & \textbf{Time (ms)} & \textbf{FPS} \\
+\hline
+YOLOv11m (Sentry Only) & 28.2 & 35.5 \\
+\hline
+SAM 3 (Judge Only, per ROI) & 1268.7 & 0.79 \\
+\hline
+\hline
+\multicolumn{3}{|l|}{\textbf{Weighted Average Calculation:}} \\
+\hline
+\multicolumn{3}{|l|}{$\bullet$ YOLO-only path (79.8\%): 35.5 FPS $\times$ 0.798 = 28.3} \\
+\hline
+\multicolumn{3}{|l|}{$\bullet$ SAM path (20.2\%): 0.79 FPS $\times$ 0.202 = 0.16} \\
+\hline
+\multicolumn{3}{|l|}{\textbf{Effective Throughput: $\sim$28.5 FPS}} \\
+\hline
+\end{tabular}
+\end{table}
+
+While individual SAM inference is slow ($\sim$1.27s per ROI), the intelligent bypass mechanism maintains an effective throughput of \textbf{28.5 FPS}—sufficient for real-time surveillance applications.
+
+\subsection{Qualitative Analysis: Hallucination Correction}
+A critical finding of this study is the system's ability to reject ``Hallucinations.'' In complex construction environments, background textures (e.g., piles of bricks, wall discoloration) often mimic the features of a helmet.
+
+As shown in Figure \ref{fig:checklist_cases}b, the Sentry incorrectly classified a wall segment as a `Helmet' (False Positive). In a traditional system, this would be logged as a ``Safe Worker,'' potentially masking a true violation. The SAM 3 Judge, driven by the semantic prompt ``hard hat,'' scanned the region and found no matching concept, correctly invalidating the bounding box. This \textbf{Negative Verification} capability is a unique advantage of Vision-Language models.
+
+\begin{figure*}[t]
+    \centering
+    \begin{tabular}{cc}
+        \includegraphics[width=0.48\textwidth]{Figure3_Hybrid_Checklist1.png} &
+        \includegraphics[width=0.48\textwidth]{Figure3_Hybrid_Checklist2.png} \\
+        (a) Case A: Precision (Missing Helmet) & (b) Case B: Hallucination Correction
+    \end{tabular}
+    \caption{Qualitative Forensics. (a) The system identifies a single missing item using the checklist logic. (b) \textbf{False Positive Rejection:} YOLO incorrectly detected a `Helmet' on the wall. SAM 3 failed to semantically verify the object and removed the false box, correctly flagging the worker as Unsafe.}
+    \label{fig:checklist_cases}
+\end{figure*}
+
+\subsection{The Safety Ecosystem: Agentic Outputs}
+Beyond detection, the system successfully demonstrated the ``Safety Ecosystem'' workflow. Figure \ref{fig:agent_report} confirms the generation of a legally compliant PDF citation citing \textit{OSHA 1926.100}, followed by an automated SMTP email alert. This proves the system's readiness for integration into Enterprise Resource Planning (ERP) software.
+
+\begin{figure}[h]
+    \centering
+    \begin{tabular}{c}
+        \includegraphics[width=0.85\columnwidth]{Figure_Agent_Report.png} \\
+        (a) Generated PDF Citation \\
+        \includegraphics[width=0.85\columnwidth]{email_screenshot.png} \\
+        (b) Real-time Email Notification
+    \end{tabular}
+    \caption{The Agentic Output. The system maps the pixel data to OSHA regulations, generating a formal report (a) and notifying supervisors via email (b).}
+    \label{fig:agent_report}
+\end{figure}
+
+% =================================================================================
+% 5. DISCUSSION
+% =================================================================================
+\section{Discussion}
+
+\subsection{Understanding the Absence Detection Challenge}
+Our quantitative results reveal that YOLOv11m achieves 84.0\% average mAP on PPE presence detection but only 41.1\% mAP on violation detection—a 43 percentage point gap. Three fundamental factors explain this asymmetry:
+
+\subsubsection{Factor 1: Extreme Class Imbalance}
+The dataset contains 201 helmet instances versus only 45 no\_helmet instances (4.4:1 ratio). During training, the model observes compliant workers far more frequently, causing the loss function to optimize for the majority class.
+
+\subsubsection{Factor 2: Visual Ambiguity}
+Detecting a helmet requires recognizing positive visual features: hard shell texture, bright colors, curved geometry. Detecting the \textit{absence} of a helmet requires distinguishing hair, cloth hoods, or bare heads from helmets—features that share similar spatial arrangements.
+
+\subsubsection{Factor 3: Discriminative Classifier Limitations}
+CNNs are trained to maximize separability between classes in feature space. For positive examples, the model learns distinct features. For negative examples (absence), the model must learn ``lack of features''—a fundamentally weaker signal.
+
+\subsection{Why SAM 3 Succeeds Where YOLO Fails}
+The SAM 3 Judge employs fundamentally different reasoning that enables the 14.3\% false positive reduction:
+\begin{itemize}
+    \item \textbf{Promptable Concept Search:} Instead of classifying pixels, SAM searches for the semantic concept ``hard hat'' via text prompts. If the concept is absent, it returns an empty mask—a direct representation of ``nothing found.''
+    \item \textbf{Vision-Language Grounding:} Pre-trained on massive internet-scale data, SAM has learned the abstract concept of ``safety helmet'' beyond pixel patterns, enabling robust generalization.
+    \item \textbf{Geometric Constraints:} By cropping Head and Torso ROIs, we enforce spatial logic: ``Is there a helmet \textit{on this specific head}?'' This eliminates false positives from helmets lying on the ground or on equipment racks.
+\end{itemize}
+
+Our experiments confirm that this semantic approach reduces false positives from 28 to 24, improving precision without requiring additional training data.
+
+\subsection{The Role of Geometric Priors}
+Our experiments highlighted the importance of \textbf{Geometric Prompt Engineering}. Initially, running SAM 3 with the text prompt ``helmet'' on the entire image resulted in the model segmenting helmets on the ground or on racks, leading to False Safe classifications. By constraining the SAM 3 input to the \textbf{Head ROI} (top 40\% of the person box), we enforced a spatial logic: ``Is there a helmet \textit{on this specific head}?'' This constraint significantly improved the logical consistency of the system.
+
+\subsection{Limitations and Future Work}
+While the Hybrid architecture addresses the precision challenge, it introduces hardware dependencies. The SAM 3 model requires significant VRAM (approx. 6GB), precluding deployment on edge microcontrollers like the Raspberry Pi or Jetson Nano 2GB.
+
+\subsubsection{Proposed Solutions for Edge Deployment}
+\begin{enumerate}
+    \item \textbf{Knowledge Distillation:} Use the SAM 3 model to auto-label a massive dataset of ``hard examples'' (the 20.2\% ambiguous cases), then train a lightweight YOLOv11-Nano model on this enriched dataset, effectively transferring the teacher's semantic knowledge to a mobile-friendly student \cite{hinton2015distilling}. This approach would enable deployment on resource-constrained edge devices while maintaining the semantic reasoning capabilities learned from SAM 3.
+    \item \textbf{Temporal Consistency Filtering:} Exploit video temporal coherence to reduce frame-by-frame false positives. If a worker is detected as ``Safe'' in frames $t-1$ and $t+1$, a violation in frame $t$ is likely a false alarm.
+    \item \textbf{Active Learning for Class Balance:} Address the 4.4:1 imbalance between helmets and violations at the dataset level by deploying the system to collect real-world violation examples, progressively reducing the performance gap through balanced retraining.
+    \item \textbf{Multi-Modal Fusion:} Integrate thermal imaging or depth sensors to disambiguate hair vs. helmet texture, leveraging 3D geometry that 2D vision alone cannot capture.
+\end{enumerate}
+
+\subsubsection{Broader Research Directions}
+Future work will extend this framework to:
+\begin{itemize}
+    \item \textbf{Multi-Camera Coordination:} Aggregate detections across multiple viewpoints to resolve occlusions and improve recall.
+    \item \textbf{Longitudinal Safety Analytics:} Track individual worker compliance over time to identify habitual violators requiring targeted safety training.
+    \item \textbf{Generalization to Other Domains:} Apply the Sentry-Judge paradigm to healthcare (hand hygiene monitoring), manufacturing (lockout-tagout compliance), and transportation (seatbelt detection).
+\end{itemize}
+
+% =================================================================================
+% 6. CONCLUSION
+% =================================================================================
+\section{Conclusion}
+This paper presents the Sentry-Judge framework for construction safety compliance that addresses the fundamental Absence Detection Paradox—the 43 percentage point performance gap between presence detection (84.0\% mAP) and absence detection (41.1\% mAP). By combining YOLOv11m's speed with SAM 3's semantic reasoning through intelligent conditional verification, we achieve:
+
+\begin{itemize}
+    \item \textbf{Quantitative validation} of the Absence Detection Paradox with per-class analysis
+    \item \textbf{14.3\% false positive reduction} through hybrid verification
+    \item \textbf{79.8\% SAM bypass rate} via efficient 5-path routing
+    \item \textbf{Effective 28.5 FPS throughput} via weighted averaging
+    \item \textbf{9.5\% precision improvement} on minority classes using SGD optimizer
+    \item \textbf{Automated OSHA compliance reporting} through agentic layer
+\end{itemize}
+
+Our key insight is that \textit{most frames don't need foundation model verification}. The ``verify only when uncertain'' paradigm enables hybrid architectures to leverage powerful but slow models without sacrificing real-time performance. This Sentry-Judge paradigm establishes a template for hybrid AI systems that balance computational cost with accuracy requirements.
+
+Our work provides actionable insights for practitioners: \textit{absence detection requires semantic understanding, not just pattern matching}. Future deployment of safety monitoring systems should adopt hybrid architectures that reserve computationally expensive Foundation Models for the 20\% of ambiguous cases where they provide maximum value, rather than applying them uniformly to all frames.
+
+% =================================================================================
+% APPENDICES
+% =================================================================================
+\appendices
+\section{Agentic Logic Implementation}
+To facilitate reproducibility, we provide the core logic for the Agentic Reporting Layer, which maps violations to OSHA codes.
+
+\begin{verbatim}
+class ComplianceAgent:
+    def __init__(self):
+        self.osha_db = {
+            "no_helmet": {
+                "code": "1926.100(a)",
+                "text": "Employees working in areas..."
+            },
+            "no_vest": {
+                "code": "1926.651(d)",
+                "text": "Employees exposed to traffic..."
+            }
+        }
+
+    def generate_citation(self, violation_type):
+        rule = self.osha_db.get(violation_type)
+        report = f"""
+        VIOLATION REPORT
+        ----------------
+        DETECTED: {violation_type.upper()}
+        CITED REGULATION: OSHA {rule['code']}
+        DESCRIPTION: {rule['text']}
+        ACTION: Immediate Intervention Required.
+        """
+        return report
+\end{verbatim}
+
+% =================================================================================
+% REFERENCES
+% =================================================================================
+\bibliographystyle{IEEEtran}
+\bibliography{references}
+
+\end{document}

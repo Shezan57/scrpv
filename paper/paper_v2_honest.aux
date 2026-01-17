@@ -1,0 +1,75 @@
+\relax 
+\providecommand\hyper@newdestlabel[2]{}
+\providecommand\HyField@AuxAddToFields[1]{}
+\providecommand\HyField@AuxAddToCoFields[2]{}
+\citation{bls_fatalities_2024}
+\citation{bls_fatalities_2024}
+\citation{osha_stats}
+\citation{redmon2016yolo,jocher2023ultralytics}
+\@writefile{toc}{\contentsline {section}{\numberline {I}Introduction}{1}{section.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {I-A}}Background and Motivation}{1}{subsection.1.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {I-B}}The Absence Detection Problem}{1}{subsection.1.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {I-C}}The Proposed Solution: Sentry-Judge Framework}{1}{subsection.1.3}\protected@file@percent }
+\citation{ren2015faster}
+\citation{redmon2016yolo}
+\citation{bochkovskiy2020yolov4}
+\citation{wang2023yolov7}
+\citation{jocher2023ultralytics}
+\citation{yolo11_docs}
+\citation{kirillov2023segment}
+\citation{sam3_meta}
+\citation{hybrid_survey_2024}
+\citation{kaggle_ppe}
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {I-D}}Contributions}{2}{subsection.1.4}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {II}Related Work}{2}{section.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {II-A}}Evolution of Real-Time Object Detection}{2}{subsection.2.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {II-B}}Vision-Language Foundation Models}{2}{subsection.2.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {II-C}}Hybrid Detection Architectures}{2}{subsection.2.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {III}Methodology}{2}{section.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {III-A}}System Architecture}{2}{subsection.3.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {III-B}}Dataset and Class Distribution}{2}{subsection.3.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {III-C}}Stage 1: The Sentry (YOLOv11m)}{2}{subsection.3.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {III-D}}Stage 2: The Judge (SAM 3)}{2}{subsection.3.4}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {III-E}}5-Path Decision Logic}{2}{subsection.3.5}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {III-F}}Agentic Compliance Layer}{3}{subsection.3.6}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {IV}Experiments and Results}{3}{section.4}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {IV-A}}Experimental Setup}{3}{subsection.4.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {IV-B}}Evaluation Methodology}{3}{subsection.4.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {IV-C}}YOLO-Only Baseline Results}{3}{subsection.4.3}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {I}{\ignorespaces YOLO-Only Baseline Performance (Violation Detection)}}{3}{table.1}\protected@file@percent }
+\newlabel{tab:yolo_baseline}{{I}{3}{YOLO-Only Baseline Performance (Violation Detection)}{table.1}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {IV-D}}Hybrid System Results}{3}{subsection.4.4}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {II}{\ignorespaces Hybrid System Performance (YOLO + SAM)}}{3}{table.2}\protected@file@percent }
+\newlabel{tab:hybrid_results}{{II}{3}{Hybrid System Performance (YOLO + SAM)}{table.2}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {III}{\ignorespaces Decision Path Distribution (213 Worker Instances)}}{3}{table.3}\protected@file@percent }
+\newlabel{tab:decision_paths}{{III}{3}{Decision Path Distribution (213 Worker Instances)}{table.3}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {IV-E}}Decision Path Distribution}{3}{subsection.4.5}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {IV-F}}Throughput Analysis}{3}{subsection.4.6}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {IV}{\ignorespaces Inference Speed Analysis (NVIDIA T4 GPU)}}{3}{table.4}\protected@file@percent }
+\newlabel{tab:latency}{{IV}{3}{Inference Speed Analysis (NVIDIA T4 GPU)}{table.4}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {IV-G}}SGD vs AdamW Ablation}{3}{subsection.4.7}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {V}{\ignorespaces Optimizer Ablation Study (Validation Set)}}{3}{table.5}\protected@file@percent }
+\newlabel{tab:optimizer}{{V}{3}{Optimizer Ablation Study (Validation Set)}{table.5}{}}
+\bibstyle{IEEEtran}
+\bibcite{bls_fatalities_2024}{1}
+\bibcite{osha_stats}{2}
+\bibcite{redmon2016yolo}{3}
+\bibcite{ren2015faster}{4}
+\bibcite{bochkovskiy2020yolov4}{5}
+\bibcite{wang2023yolov7}{6}
+\bibcite{jocher2023ultralytics}{7}
+\bibcite{yolo11_docs}{8}
+\bibcite{kirillov2023segment}{9}
+\bibcite{sam3_meta}{10}
+\bibcite{lin2017focal}{11}
+\bibcite{kaggle_ppe}{12}
+\bibcite{zhang2017mixup}{13}
+\bibcite{hybrid_survey_2024}{14}
+\@writefile{toc}{\contentsline {section}{\numberline {V}Discussion}{4}{section.5}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {V-A}}Why Hybrid Improves Precision}{4}{subsection.5.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {V-B}}The Value of Intelligent Bypass}{4}{subsection.5.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {V-C}}Limitations}{4}{subsection.5.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {V-D}}Practical Implications}{4}{subsection.5.4}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {VI}Conclusion}{4}{section.6}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{References}{4}{section*.1}\protected@file@percent }
+\gdef \@abspage@last{4}

@@ -1,0 +1,139 @@
+I. LITERATURE REVIEW
+A. Construction Safety and Automated Monitoring
+The construction industry accounts for approximately 30–
+40% of workplace fatalities despite employing only 7% of the
+global workforce [1]. Personal Protective Equipment (PPE)
+compliance remains challenging due to dynamic environments
+and manual inspection limitations, with error rates of 12–
+15% compared to 2–5% for automated systems [2]. Computer
+vision and deep learning technologies have enabled automated
+safety monitoring frameworks that integrate real-time detection
+with compliance verification [1], [3].
+B. YOLO-Based Object Detection for PPE
+YOLO (You Only Look Once) revolutionized real-time
+object detection by reframing it as a single regression problem,
+achieving 45 FPS on standard hardware [4]. Recent iterations
+have shown significant improvements: YOLOv8 achieved 96%
+mAP for PPE detection [5], while YOLOv11 implementations
+reached 94.0% precision and 92.8% mAP@50 across seven
+PPE categories [2]. Comparative studies validated YOLOv11’s
+superiority with mAP50 of 0.718 and precision of 0.804 on
+16,568 annotated construction images [6].
+Architectural optimizations for construction environments
+include SC-YOLO with Sophia optimization achieving 96.3–
+97.6% mAP@0.5 [7], and HFE-YOLO with hybrid feature
+enhancement reaching 95.0% mAP@50 on imbalanced
+datasets [8].Wu et al. [15] proposed YOLOv8-CGS integrating
+CBAM and GAM attention mechanisms, achieving 94.58%
+accuracy on helmet detection with 5.9% improvement over
+baseline YOLOv8. However, standard detectors face critical
+limitations in “absence detection”—distinguishing workers
+without PPE from those with PPE involves subtle semantic
+differences frequently lost in background clutter.
+C. Foundation Models for Segmentation
+The Segment Anything Model (SAM) introduced promptable
+segmentation with impressive zero-shot performance on
+1 billion masks [9]. SAM 2 extended this to video segmentation
+with streaming memory architecture, achieving 3×
+fewer interactions and 6× faster inference than the original
+SAM [10]. The latest advancement, SAM 3, formalizes
+Promptable Concept Segmentation (PCS) by processing text
+prompts (e.g., “safety vest”) to predict instance masks while
+preserving object identities across frames [11]. SAM 3’s
+decoupled presence head doubles the accuracy of existing
+systems, offering unique advantages for forensic verification
+of PPE compliance through semantic text prompting.
+D. Vision-Language Models and Multimodal Approaches
+Vision-Language Models (VLMs) enable automated safety
+compliance through multimodal understanding. Chen et
+al. [12] framed hazard recognition as Visual Question Answering
+(VQA), achieving BLEU scores of 0.1355 with automated
+OSHA compliance reporting. Sivanraj et al. [16] developed
+a real-time safety detection model integrating YOLOv11-s,
+VLM, and NLP, achieving 77.5% accuracy for PPE detection
+and 86.5% for hazardous ground opening detection. Their
+system generates image captions describing environmental
+conditions (74.31% accuracy) and matches safety measurerelated
+phrases for compliance verification, with real-time
+alerts via Telegram and automated weekly safety reports.
+Research on visually absent tokens revealed that VLMs
+often misperceive textual inputs lacking visual evidence as
+present in images [13]. Identification of Visual Absence-aware
+(VA) neurons offers pathways for addressing absence detection
+challenges critical to safety monitoring systems.
+E. Hybrid Detection-Segmentation Architectures
+Hybrid architectures leverage complementary strengths of
+detection and segmentation models. Cabral et al. [14] demonstrated
+class-specific strategies in YOLO+SAM pipelines
+achieving mAP50 of 0.593 through selective application: native
+YOLO for linear features and SAM for complex segmentation
+tasks. Akbarzadeh et al. [3] proposed cascaded Faster
+R-CNN achieving 99.67% precision for worker detection and
+91.25% for PPE verification, demonstrating effectiveness of
+hierarchical approaches in far-field surveillance scenarios.
+F. Research Gap and Contributions
+Despite advances in PPE detection, a critical gap persists
+in absence detection. Standard detectors excel at presence
+detection but struggle with semantic distinctions required for
+identifying missing PPE, resulting in high false-negative rates
+for safety violations. While multimodal approaches integrate
+VLMs with object detection [16] and architectural optimizations
+improve accuracy [7], [8], [15], the systematic integration
+of real-time detection, promptable segmentation, and agentic
+reasoning for OSHA compliance remains unexplored. This
+research addresses these gaps through a hybrid Sentry-Judge
+cascade architecture combining YOLOv11 for high-speed filtering
+with SAM 3 for forensic verification, enabling accurate
+absence detection while maintaining real-time throughput for
+construction environments.
+REFERENCES
+[1] N. Khan, S. F. A. Zaidi, J. Yang, C. Park, and D. Lee, “Construction
+work-stage-based rule compliance monitoring framework using computer
+vision (CV) technology,” Buildings, vol. 13, no. 8, art. 2093, Aug.
+2023.
+[2] J. Ordrick, G. H. Wibowo, A. Fahmi, I. Kurniawan, and E. S. Haq,
+“YOLOv11-based automated PPE detection system for workplace safety
+monitoring in electric power distribution operations,” J. Inf. Syst. Inform.,
+vol. 7, no. 4, pp. 4294–4329, Dec. 2025.
+[3] M. Akbarzadeh, Z. Zhu, and A. Hammad, “Nested network for detecting
+PPE on large construction sites based on frame segmentation,” in Proc.
+Creative Construction e-Conf., 2020, pp. 33–42.
+[4] J. Redmon, S. Divvala, R. Girshick, and A. Farhadi, “You only look
+once: Unified, real-time object detection,” in Proc. IEEE CVPR, 2016,
+pp. 779–788.
+[5] A. Makandar and R. Naik, “Real-time personal protective equipment
+(PPE) detection using YOLOv8 and computer vision for industrial safety
+compliances,” Int. J. Adv. Res. Comput. Commun. Eng., vol. 14, no. 8,
+Aug. 2025.
+[6] M. Fadhilla, Sapitri, and R. Wandri, “Deep learning-based identification
+of personal protective equipment in construction area,” Sistemasi: J. Sist.
+Inform., vol. 14, no. 4, pp. 1711–1721, 2025.
+[7] T. Saeheaw, “SC-YOLO: A real-time CSP-based YOLOv11n variant
+optimized with Sophia for accurate PPE detection on construction sites,”
+Buildings, vol. 15, no. 16, art. 2854, Aug. 2025.
+[8] T. Saeheaw, “HFE-YOLO: Hybrid feature enhancement with multiattention
+mechanisms for construction site object detection,” Buildings,
+vol. 15, no. 23, art. 4274, Nov. 2025.
+[9] A. Kirillov et al., “Segment anything,” in Proc. IEEE/CVF ICCV, 2023,
+pp. 4015–4026.
+[10] N. Ravi et al., “SAM 2: Segment anything in images and videos,” arXiv
+preprint arXiv:2408.00714, 2024.
+[11] N. Carion et al., “SAM 3: Segment anything with concepts,” arXiv
+preprint arXiv:2511.16719, 2025.
+[12] D. Chen, L. Chen, Y. Zeng, C. Hancock, R. Lock, and S. Sølvsten,
+“Vision LLM-driven operational hazard recognition for building fire
+safety compliance checking,” in Proc. 6th Int. Conf. ICCBEI, 2025, pp.
+829–840.
+[13] S. Kim, S. Ryu, J. Park, and E. Yang, “Unveiling the response of
+large vision-language models to visually absent tokens,” arXiv preprint
+arXiv:2509.03025, 2025.
+[14] R. Cabral, R. Santos, J. A. F. O. Correia, and D. Ribeiro, “A hybrid
+YOLO and segment anything model pipeline for multi-damage segmentation
+in UAV inspection imagery,” Sensors, vol. 25, no. 21, art. 6568,
+Oct. 2025.
+[15] Z. Wu, X. Lei, and M. Kumar, “Advancing construction safety:
+YOLOv8-CGS helmet detection model,” PLOS ONE, vol. 20, no. 5,
+art. e0321713, May 2025.
+[16] S. Sivanraj, D. N. L. S. Uduwage, and M. Tripathi, “Real-time safety
+detection on construction sites using a vision-language and NLP-based
+model,” Adv. Eng. Inform., vol. 69, art. 103889, 2026.

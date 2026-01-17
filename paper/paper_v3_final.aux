@@ -1,0 +1,110 @@
+\relax 
+\providecommand\hyper@newdestlabel[2]{}
+\providecommand\HyField@AuxAddToFields[1]{}
+\providecommand\HyField@AuxAddToCoFields[2]{}
+\citation{bls_fatalities_2024}
+\citation{bls_fatalities_2024}
+\citation{osha_stats}
+\citation{fang2018computer,nath2020deep}
+\citation{redmon2016yolo}
+\citation{lin2017focal}
+\@writefile{toc}{\contentsline {section}{\numberline {I}Introduction}{1}{section.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {I-A}}Background and Motivation}{1}{subsection.1.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {I-B}}The Absence Detection Paradox}{1}{subsection.1.2}\protected@file@percent }
+\citation{sam3_meta}
+\citation{ren2015faster}
+\citation{redmon2016yolo}
+\citation{bochkovskiy2020yolov4}
+\citation{wang2023yolov7}
+\citation{jocher2023ultralytics}
+\citation{yolo11_docs}
+\citation{kirillov2023segment}
+\citation{radford2021learning}
+\citation{sam3_meta}
+\citation{buda2018systematic}
+\citation{lin2017focal}
+\citation{wilson2017marginal,keskar2017improving}
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {I-C}}The Proposed Solution: Sentry-Judge Framework}{2}{subsection.1.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {I-D}}Contributions}{2}{subsection.1.4}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {II}Related Work}{2}{section.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {II-A}}Evolution of Real-Time Object Detection}{2}{subsection.2.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {II-B}}Vision-Language Foundation Models}{2}{subsection.2.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {II-C}}Class Imbalance in Safety Detection}{2}{subsection.2.3}\protected@file@percent }
+\citation{kaggle_ppe}
+\citation{bochkovskiy2020yolov4}
+\citation{zhang2017mixup}
+\citation{kaggle_ppe}
+\@writefile{toc}{\contentsline {section}{\numberline {III}Methodology}{3}{section.3}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {1}{\ignorespaces Hierarchical Sentry-Judge architecture showing the four-stage pipeline. \textbf  {Stage 1 (Sentry):} YOLOv11m detects workers and PPE at 35.5 FPS. \textbf  {Stage 2 (Smart Router):} Confidence-based branching routes 79.8\% of high-confidence detections directly to compliance logging, bypassing SAM. Only 20.2\% of ambiguous cases trigger forensic verification. \textbf  {Stage 3 (Judge):} SAM 3 performs semantic verification using text prompts on cropped ROIs. \textbf  {Stage 4 (Agent):} Verified violations generate OSHA-compliant PDF reports.}}{3}{figure.1}\protected@file@percent }
+\newlabel{fig:architecture}{{1}{3}{Hierarchical Sentry-Judge architecture showing the four-stage pipeline. \textbf {Stage 1 (Sentry):} YOLOv11m detects workers and PPE at 35.5 FPS. \textbf {Stage 2 (Smart Router):} Confidence-based branching routes 79.8\% of high-confidence detections directly to compliance logging, bypassing SAM. Only 20.2\% of ambiguous cases trigger forensic verification. \textbf {Stage 3 (Judge):} SAM 3 performs semantic verification using text prompts on cropped ROIs. \textbf {Stage 4 (Agent):} Verified violations generate OSHA-compliant PDF reports}{figure.1}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {III-A}}Dataset and Class Distribution}{3}{subsection.3.1}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {I}{\ignorespaces Dataset Class Distribution (Validation Set)}}{3}{table.1}\protected@file@percent }
+\newlabel{tab:dataset}{{I}{3}{Dataset Class Distribution (Validation Set)}{table.1}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {III-B}}Stage 1: The Sentry (YOLOv11m)}{3}{subsection.3.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {III-C}}Stage 2: The Judge (SAM 3)}{3}{subsection.3.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {III-D}}5-Path Decision Logic}{3}{subsection.3.4}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {III-E}}Agentic Compliance Layer}{3}{subsection.3.5}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {2}{\ignorespaces Algorithmic flowchart of the 5-Path Sentry-Judge decision logic showing confidence-based routing.}}{4}{figure.2}\protected@file@percent }
+\newlabel{fig:decision_flowchart}{{2}{4}{Algorithmic flowchart of the 5-Path Sentry-Judge decision logic showing confidence-based routing}{figure.2}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {IV}Experiments and Results}{4}{section.4}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {IV-A}}Experimental Setup}{4}{subsection.4.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {IV-B}}Training Dynamics and Convergence}{4}{subsection.4.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {IV-C}}Quantitative Evidence of Absence Detection Paradox}{4}{subsection.4.3}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {II}{\ignorespaces Per-Class Detection Performance (YOLOv11m-SGD, Validation Set)}}{4}{table.2}\protected@file@percent }
+\newlabel{tab:per_class}{{II}{4}{Per-Class Detection Performance (YOLOv11m-SGD, Validation Set)}{table.2}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {\mbox  {IV-C}1}Key Finding: The Performance Gap}{4}{subsubsection.4.3.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {IV-D}}SGD vs AdamW Optimizer Ablation}{4}{subsection.4.4}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {III}{\ignorespaces Optimizer Ablation Study (150 Epochs, Validation Set)}}{4}{table.3}\protected@file@percent }
+\newlabel{tab:optimizer}{{III}{4}{Optimizer Ablation Study (150 Epochs, Validation Set)}{table.3}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {IV-E}}Hybrid System Results}{5}{subsection.4.5}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {IV}{\ignorespaces Hybrid System Performance (YOLO + SAM)}}{5}{table.4}\protected@file@percent }
+\newlabel{tab:hybrid}{{IV}{5}{Hybrid System Performance (YOLO + SAM)}{table.4}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {IV-F}}Decision Path Distribution}{5}{subsection.4.6}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {V}{\ignorespaces Decision Path Distribution (213 Worker Instances)}}{5}{table.5}\protected@file@percent }
+\newlabel{tab:paths}{{V}{5}{Decision Path Distribution (213 Worker Instances)}{table.5}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {IV-G}}Throughput Analysis}{5}{subsection.4.7}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {VI}{\ignorespaces Inference Speed Analysis (NVIDIA T4 GPU)}}{5}{table.6}\protected@file@percent }
+\newlabel{tab:latency}{{VI}{5}{Inference Speed Analysis (NVIDIA T4 GPU)}{table.6}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {IV-H}}Qualitative Analysis: Hallucination Correction}{5}{subsection.4.8}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {IV-I}}The Safety Ecosystem: Agentic Outputs}{5}{subsection.4.9}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {V}Discussion}{5}{section.5}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {V-A}}Understanding the Absence Detection Challenge}{5}{subsection.5.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {\mbox  {V-A}1}Factor 1: Extreme Class Imbalance}{5}{subsubsection.5.1.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {\mbox  {V-A}2}Factor 2: Visual Ambiguity}{5}{subsubsection.5.1.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {\mbox  {V-A}3}Factor 3: Discriminative Classifier Limitations}{5}{subsubsection.5.1.3}\protected@file@percent }
+\citation{hinton2015distilling}
+\@writefile{lof}{\contentsline {figure}{\numberline {3}{\ignorespaces Qualitative Forensics. (a) The system identifies a single missing item using the checklist logic. (b) \textbf  {False Positive Rejection:} YOLO incorrectly detected a `Helmet' on the wall. SAM 3 failed to semantically verify the object and removed the false box, correctly flagging the worker as Unsafe.}}{6}{figure.3}\protected@file@percent }
+\newlabel{fig:checklist_cases}{{3}{6}{Qualitative Forensics. (a) The system identifies a single missing item using the checklist logic. (b) \textbf {False Positive Rejection:} YOLO incorrectly detected a `Helmet' on the wall. SAM 3 failed to semantically verify the object and removed the false box, correctly flagging the worker as Unsafe}{figure.3}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {V-B}}Why SAM 3 Succeeds Where YOLO Fails}{6}{subsection.5.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {V-C}}The Role of Geometric Priors}{6}{subsection.5.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {V-D}}Limitations and Future Work}{6}{subsection.5.4}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {\mbox  {V-D}1}Proposed Solutions for Edge Deployment}{6}{subsubsection.5.4.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {\mbox  {V-D}2}Broader Research Directions}{6}{subsubsection.5.4.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {VI}Conclusion}{6}{section.6}\protected@file@percent }
+\bibstyle{IEEEtran}
+\bibdata{references}
+\bibcite{bls_fatalities_2024}{1}
+\bibcite{osha_stats}{2}
+\bibcite{fang2018computer}{3}
+\bibcite{nath2020deep}{4}
+\bibcite{redmon2016yolo}{5}
+\bibcite{lin2017focal}{6}
+\bibcite{sam3_meta}{7}
+\bibcite{ren2015faster}{8}
+\@writefile{lof}{\contentsline {figure}{\numberline {4}{\ignorespaces The Agentic Output. The system maps the pixel data to OSHA regulations, generating a formal report (a) and notifying supervisors via email (b).}}{7}{figure.4}\protected@file@percent }
+\newlabel{fig:agent_report}{{4}{7}{The Agentic Output. The system maps the pixel data to OSHA regulations, generating a formal report (a) and notifying supervisors via email (b)}{figure.4}{}}
+\@writefile{toc}{\contentsline {section}{Appendix\nobreakspace  A: Agentic Logic Implementation}{7}{section*.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{References}{7}{section*.2}\protected@file@percent }
+\bibcite{bochkovskiy2020yolov4}{9}
+\bibcite{wang2023yolov7}{10}
+\bibcite{jocher2023ultralytics}{11}
+\bibcite{yolo11_docs}{12}
+\bibcite{kirillov2023segment}{13}
+\bibcite{radford2021learning}{14}
+\bibcite{buda2018systematic}{15}
+\bibcite{wilson2017marginal}{16}
+\bibcite{keskar2017improving}{17}
+\bibcite{kaggle_ppe}{18}
+\bibcite{zhang2017mixup}{19}
+\bibcite{hinton2015distilling}{20}
+\gdef \@abspage@last{8}
